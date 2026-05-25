@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth *)",
+      "PowerShell(gh auth status)",
+      "Bash(git add *)",
+      "Bash(git -C /c/Users/MADUP/myproject add sns_mention/)",
+      "Bash(git -C /c/Users/MADUP/myproject status)",
+      "Bash(git -C /c/Users/MADUP/myproject commit -m ' *)",
+      "Bash(git -C /c/Users/MADUP/myproject push origin main)",
+      "Bash(ls ~/.claude/projects/ 2>&1 | head -20)",
+      "Read(//c/Users/MADUP/.claude/projects/**)",
+      "Bash(jq -r 'select\\(.message.content\\) | .message.content[]? | select\\(.type == \"tool_use\"\\) | if .name == \"Bash\" then \"Bash:\" + .input.command else .name end' ~/.claude/projects/c--Users-MADUP-myproject-sns-mention/*.jsonl)",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)"
+    ]
+  }
+}
