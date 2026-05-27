@@ -45,6 +45,12 @@ def test_voice_humor_level_bounds():
         Voice(humor_level=6)
 
 
+def test_models_reject_unknown_fields():
+    """`extra="forbid"` 회귀 가드 — spec §5 의 schema-violation 경고 흐름이 이 동작에 의존."""
+    with pytest.raises(ValidationError):
+        Voice(unknown_field="x")
+
+
 def test_must_use_name_default_note_empty():
     name = MustUseName(term="Nike")
     assert name.note == ""

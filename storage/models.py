@@ -27,6 +27,8 @@ class BrandRules(BaseModel):
 class Voice(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Voice.register shadows pydantic.BaseModel.register (deprecated v1 method).
+    # The warning is filtered in pytest.ini; spec §2 mandates this field name.
     register: str = "casual"
     address_form: str = ""
     sentence_endings: list[str] = Field(default_factory=list)
