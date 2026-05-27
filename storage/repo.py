@@ -25,7 +25,8 @@ class BrandRepo:
     @staticmethod
     def slugify(name: str) -> str:
         s = name.strip().lower()
-        s = re.sub(r"[^\w\s가-힣\-]", "", s)
+        # \w is Unicode-aware in Python 3 — already covers Hangul.
+        s = re.sub(r"[^\w\s\-]", "", s)
         s = re.sub(r"\s+", "-", s)
         s = re.sub(r"-+", "-", s).strip("-")
         return s or "brand"
