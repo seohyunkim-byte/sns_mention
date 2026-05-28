@@ -39,8 +39,9 @@ def main() -> None:
         from ui.register_view import render_register_view
         render_register_view(repo, client_factory=ClaudeClient)
     elif mode == "generate":
-        st.header(f"카피 생성 — {st.session_state.current_slug} (Task 12에서 구현)")
-        st.info("Brief 입력 + 3변종 출력이 이 자리에 들어갑니다.")
+        from core.claude_client import ClaudeClient
+        from ui.generate_view import render_generate_view
+        render_generate_view(repo, client_factory=ClaudeClient)
     else:
         st.title("브랜드 맞춤형 인스타그램 캡션 생성기")
         st.write("왼쪽 사이드바에서 브랜드를 선택하거나 새로 등록하세요.")
