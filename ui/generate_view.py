@@ -80,7 +80,7 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
         selected.append("이벤트 강조")
 
     if st.button("🚀 카피 생성", type="primary", disabled=not (brief.strip() and selected)):
-        with st.spinner("Claude 가 카피를 작성하고 맞춤법을 검증합니다..."):
+        with st.spinner("AI 가 카피를 작성하고 맞춤법을 검증합니다..."):
             try:
                 results = run_full_generation(
                     client=client_factory(),

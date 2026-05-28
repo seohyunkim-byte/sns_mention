@@ -175,7 +175,7 @@ def _render_step3_review(repo: BrandRepo, client_factory) -> None:
     )
 
     if not st.session_state.get("analysis_done"):
-        with st.spinner("Claude 가 톤을 분석 중입니다 (10~30초)..."):
+        with st.spinner("AI 가 톤을 분석 중입니다 (10~30초)..."):
             try:
                 profile_dict = run_analysis(
                     client=client_factory(),
@@ -207,7 +207,7 @@ def _render_step3_review(repo: BrandRepo, client_factory) -> None:
                     source_url=st.session_state.get("source_url", ""),
                     analyzed_at=datetime.now(),
                     post_count=len(posts),
-                    model_version="claude-sonnet-4-6",
+                    model_version=LLMClient.DEFAULT_MODEL,
                 ),
                 voice=Voice.model_validate(profile_dict["voice"]),
                 emoji=Emoji.model_validate(profile_dict["emoji"]),
@@ -219,7 +219,7 @@ def _render_step3_review(repo: BrandRepo, client_factory) -> None:
             )
         except (KeyError, ValidationError) as e:
             st.error(f"분석 결과 스키마 위반: {e}")
-            st.caption("Claude 응답이 예상 형식과 맞지 않습니다. 위 JSON 을 확인하고 '이전' 으로 돌아가 재분석하세요.")
+            st.caption("AI 응답이 예상 형식과 맞지 않습니다. 위 JSON 을 확인하고 '이전' 으로 돌아가 재분석하세요.")
             if st.button("← Step 2 로 돌아가기"):
                 st.session_state.register_step = 2
                 st.session_state.analysis_done = False
