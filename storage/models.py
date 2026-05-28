@@ -74,6 +74,25 @@ class Meta(BaseModel):
     model_version: str = ""
 
 
+class CaptionVariant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    caption: str
+    hashtags: list[str] = Field(default_factory=list)
+
+
+class CaptionGeneration(BaseModel):
+    """한 번의 카피 생성 이력 (Brief + 결과)."""
+    model_config = ConfigDict(extra="forbid")
+
+    generated_at: datetime
+    brief: str
+    variants: list[CaptionVariant] = Field(default_factory=list)
+    extra_instruction: str = ""
+    model_version: str = ""
+
+
 class BrandProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -85,3 +104,4 @@ class BrandProfile(BaseModel):
     topics: list[str] = Field(default_factory=list)
     brand_rules: BrandRules = Field(default_factory=BrandRules)
     example_posts: list[str] = Field(default_factory=list)
+    caption_history: list[CaptionGeneration] = Field(default_factory=list)
