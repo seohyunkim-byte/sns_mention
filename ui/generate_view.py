@@ -5,13 +5,18 @@
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import streamlit as st
 
-from core.llm_client import LLMClient
 from core.generate import proofread, write_captions
-from storage.models import BrandProfile
+from core.llm_client import LLMClient
+from storage.models import (
+    BrandProfile,
+    CaptionGeneration,
+    CaptionVariant,
+)
 from storage.repo import BrandRepo
 
 
@@ -33,6 +38,27 @@ def run_full_generation(
     if not generated:
         return []
     return proofread(client=client, captions=generated, brand_rules=profile.brand_rules)
+
+
+def _append_history(
+    *,
+    repo: BrandRepo,
+    profile: BrandProfile,
+    brief: str,
+    results: list[dict[str, Any]],
+    extra_instruction: str = "",
+) -> BrandProfile:
+    """방금 생성된 카피를 BrandProfile.caption_history 에 누적 저장."""
+    entry = CaptionGeneration(
+        generated_at=datetime.now(),
+        brief=brief,
+        variants=[CaptionVariant.model_validate(v) for v in results],
+        extra_instruction=extra_instruction,
+        model_version=LLMClient.DEFAULT_MODEL,
+    )
+    profile.caption_history.append(entry)
+    repo.save(profile)
+    return profile
 
 
 # --- Streamlit 렌더 ----------------------------------------------------------
@@ -91,11 +117,16 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
             except Exception as e:
                 st.error(f"생성 실패: {e}")
                 return
+        # 위젯 key 네임스페이스를 새로 발급해서 이전 카피가 text_area session_state 에
+        # 박혀있던 문제를 해결한다 (text_area 는 key 가 있으면 session_state 값을 우선시함).
+        st.session_state.gen_id = st.session_state.get("gen_id", 0) + 1
         st.session_state.last_results = results
-        st.session_state.last_brief = brief  # 재생성 시 원본 Brief 사용
+        st.session_state.last_brief = brief
+        profile = _append_history(repo=repo, profile=profile, brief=brief, results=results)
         st.success("✓ 맞춤법 검증 완료")
 
     results = st.session_state.get("last_results") or []
+    gen_id = st.session_state.get("gen_id", 0)
     for i, variant in enumerate(results):
         with st.container(border=True):
             label = variant.get("label", "")
@@ -104,7 +135,7 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
                 "caption",
                 value=variant.get("caption", ""),
                 height=120,
-                key=f"caption-{i}",
+                key=f"caption-{gen_id}-{i}",
                 label_visibility="collapsed",
             )
             tags = " ".join(variant.get("hashtags", []))
@@ -113,9 +144,9 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
             with st.expander("🔄 이 변종만 다시 생성"):
                 extra = st.text_input(
                     "추가 지시 (예: 더 짧게 / 감정 톤 더 살려)",
-                    key=f"extra-{i}",
+                    key=f"extra-{gen_id}-{i}",
                 )
-                if st.button("재생성", key=f"regen-{i}"):
+                if st.button("재생성", key=f"regen-{gen_id}-{i}"):
                     with st.spinner("재생성 중..."):
                         try:
                             new_variants = run_full_generation(
@@ -130,5 +161,32 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
                             new_variants = []
                     if new_variants:
                         results[i] = new_variants[0]
+                        st.session_state.gen_id = gen_id + 1
                         st.session_state.last_results = results
+                        _append_history(
+                            repo=repo,
+                            profile=profile,
+                            brief=st.session_state.get("last_brief", brief),
+                            results=new_variants,
+                            extra_instruction=extra,
+                        )
                         st.rerun()
+
+    # 카피 히스토리 (생성한 모든 카피를 시간 역순으로 보관)
+    if profile.caption_history:
+        st.divider()
+        with st.expander(f"📜 생성 히스토리 ({len(profile.caption_history)}개)", expanded=False):
+            for idx, entry in enumerate(reversed(profile.caption_history)):
+                ts = entry.generated_at.strftime("%Y-%m-%d %H:%M")
+                brief_preview = entry.brief if len(entry.brief) <= 100 else entry.brief[:100] + "..."
+                header = f"#{len(profile.caption_history) - idx} · {ts}"
+                if entry.extra_instruction:
+                    header += f" · 재생성 (추가 지시: {entry.extra_instruction})"
+                st.markdown(f"**{header}**")
+                st.caption(f"Brief: {brief_preview}")
+                for v in entry.variants:
+                    st.markdown(f"- **[{v.label}]** {v.caption}")
+                    if v.hashtags:
+                        st.caption("  " + " ".join(v.hashtags))
+                if idx < len(profile.caption_history) - 1:
+                    st.markdown("---")

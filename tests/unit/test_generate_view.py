@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from storage.models import (
@@ -13,7 +14,8 @@ from storage.models import (
     Meta,
     Voice,
 )
-from ui.generate_view import run_full_generation
+from storage.repo import BrandRepo
+from ui.generate_view import _append_history, run_full_generation
 
 
 def _make_profile() -> BrandProfile:
@@ -65,3 +67,49 @@ def test_run_full_generation_with_variant_filter_skips_proofread_for_empty():
         variants=["감성"],
     )
     assert result == []
+
+
+def test_append_history_persists_to_repo(tmp_data_dir: Path):
+    repo = BrandRepo(tmp_data_dir)
+    profile = _make_profile()
+    repo.save(profile)
+
+    results = [
+        {"label": "감성", "caption": "오늘도 한 걸음", "hashtags": ["#nike"]},
+        {"label": "정보", "caption": "6/5~6/15 사전구매", "hashtags": []},
+    ]
+    updated = _append_history(
+        repo=repo,
+        profile=profile,
+        brief="6/5~6/15 사전구매 이벤트",
+        results=results,
+        extra_instruction="",
+    )
+
+    assert len(updated.caption_history) == 1
+    entry = updated.caption_history[0]
+    assert entry.brief == "6/5~6/15 사전구매 이벤트"
+    assert [v.caption for v in entry.variants] == ["오늘도 한 걸음", "6/5~6/15 사전구매"]
+    assert [v.label for v in entry.variants] == ["감성", "정보"]
+
+    # 디스크에서 다시 로드해도 동일 데이터가 살아있는지 검증.
+    reloaded = repo.load("nike-kr")
+    assert len(reloaded.caption_history) == 1
+    assert reloaded.caption_history[0].brief == "6/5~6/15 사전구매 이벤트"
+
+
+def test_append_history_accumulates_multiple_generations(tmp_data_dir: Path):
+    repo = BrandRepo(tmp_data_dir)
+    profile = _make_profile()
+    repo.save(profile)
+
+    for i in range(3):
+        profile = _append_history(
+            repo=repo,
+            profile=profile,
+            brief=f"브리프 {i}",
+            results=[{"label": "감성", "caption": f"카피 {i}", "hashtags": []}],
+        )
+
+    assert len(profile.caption_history) == 3
+    assert [e.brief for e in profile.caption_history] == ["브리프 0", "브리프 1", "브리프 2"]
