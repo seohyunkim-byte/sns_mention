@@ -4,17 +4,29 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
-from anthropic import Anthropic, APIError
+from anthropic import (
+    Anthropic,
+    APIConnectionError,
+    APIError,
+    InternalServerError,
+    RateLimitError,
+)
 from tenacity import (
-    RetryError,
+    before_sleep_log,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
+
+logger = logging.getLogger(__name__)
+
+# 일시적 오류만 재시도. 인증/요청 오류는 즉시 실패해야 백오프 시간 낭비를 막는다.
+_RETRYABLE = (APIConnectionError, RateLimitError, InternalServerError)
 
 
 class ClaudeError(Exception):
@@ -56,9 +68,10 @@ class ClaudeClient:
         """tool_use 로 JSON 출력 강제. 도구 입력 dict 를 반환."""
 
         @retry(
-            retry=retry_if_exception_type(APIError),
+            retry=retry_if_exception_type(_RETRYABLE),
             stop=stop_after_attempt(self.max_retries),
             wait=wait_exponential(multiplier=1, min=1, max=10),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
             reraise=True,
         )
         def _call() -> Any:
@@ -77,10 +90,12 @@ class ClaudeClient:
                 messages=[{"role": "user", "content": user}],
             )
 
+        logger.info("claude.call_tool model=%s tool=%s", self.model, tool_name)
         try:
             response = _call()
-        except (APIError, RetryError) as e:
-            raise ClaudeError(f"Claude call failed after {self.max_retries} attempts: {e}") from e
+        except APIError as e:
+            logger.error("claude.call_tool failed model=%s tool=%s err=%s", self.model, tool_name, e)
+            raise ClaudeError(f"Claude call failed: {e}") from e
 
         for block in response.content:
             if getattr(block, "type", None) == "tool_use" and block.name == tool_name:

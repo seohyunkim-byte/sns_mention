@@ -22,6 +22,13 @@ def _stub_anthropic_with_tool_response(payload: dict) -> MagicMock:
     return sdk
 
 
+def _transient_error():
+    """재시도 대상 예외 — 네트워크 일시 장애."""
+    from anthropic import APIConnectionError
+
+    return APIConnectionError(request=MagicMock())
+
+
 def test_call_tool_returns_tool_input():
     sdk = _stub_anthropic_with_tool_response({"foo": "bar"})
     client = ClaudeClient(sdk=sdk, model="claude-sonnet-4-6")
@@ -50,8 +57,6 @@ def test_call_tool_raises_when_no_tool_use_block():
 
 
 def test_call_tool_retries_on_transient_error_then_succeeds():
-    from anthropic import APIError
-
     sdk = MagicMock()
     response = MagicMock()
     response.stop_reason = "tool_use"
@@ -60,10 +65,7 @@ def test_call_tool_retries_on_transient_error_then_succeeds():
     block.name = "emit_json"
     block.input = {"ok": True}
     response.content = [block]
-    sdk.messages.create.side_effect = [
-        APIError("rate limit", request=MagicMock(), body=None),
-        response,
-    ]
+    sdk.messages.create.side_effect = [_transient_error(), response]
     client = ClaudeClient(sdk=sdk, max_retries=2)
     result = client.call_tool(system="s", user="u", tool_name="emit_json", tool_schema={})
     assert result == {"ok": True}
@@ -71,11 +73,31 @@ def test_call_tool_retries_on_transient_error_then_succeeds():
 
 
 def test_call_tool_gives_up_after_max_retries():
-    from anthropic import APIError
-
     sdk = MagicMock()
-    sdk.messages.create.side_effect = APIError("rate limit", request=MagicMock(), body=None)
+    sdk.messages.create.side_effect = _transient_error()
     client = ClaudeClient(sdk=sdk, max_retries=2)
-    with pytest.raises(ClaudeError, match="failed after"):
+    with pytest.raises(ClaudeError, match="failed"):
         client.call_tool(system="s", user="u", tool_name="t", tool_schema={})
     assert sdk.messages.create.call_count == 2
+
+
+def test_call_tool_does_not_retry_non_transient_error():
+    """인증 등 4xx 오류는 즉시 실패해야 백오프 시간 낭비를 막는다."""
+    from anthropic import AuthenticationError
+
+    sdk = MagicMock()
+    response = MagicMock()
+    response.status_code = 401
+    sdk.messages.create.side_effect = AuthenticationError(
+        message="invalid key", response=response, body=None
+    )
+    client = ClaudeClient(sdk=sdk, max_retries=3)
+    with pytest.raises(ClaudeError, match="failed"):
+        client.call_tool(system="s", user="u", tool_name="t", tool_schema={})
+    assert sdk.messages.create.call_count == 1
+
+
+def test_init_raises_when_api_key_missing(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ClaudeError, match="missing"):
+        ClaudeClient()
