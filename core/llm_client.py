@@ -40,17 +40,21 @@ class LLMClient:
     그 도구 호출을 강제한다 — Claude 의 `tool_choice={"type": "tool", "name": ...}` 와 동일 의도.
     """
 
-    DEFAULT_MODEL = "gemini-2.5-flash"
+    # 기본 모델은 'gemini-2.5-flash-lite' — 같은 2.5 계열 중 무료 등급 호출 한도가 가장 큼.
+    # 'gemini-2.5-flash' 는 일 20회 제한이라 팀 사용에 부적합. 환경변수 GEMINI_MODEL 로 덮어쓸 수 있다.
+    DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
     def __init__(
         self,
         *,
         sdk: Any | None = None,
         api_key: str | None = None,
-        model: str = DEFAULT_MODEL,
+        model: str | None = None,
         max_retries: int = 3,
         max_tokens: int = 8192,
     ):
+        if model is None:
+            model = os.environ.get("GEMINI_MODEL", self.DEFAULT_MODEL)
         if sdk is None:
             key = (
                 api_key
