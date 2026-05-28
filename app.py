@@ -24,7 +24,7 @@ load_dotenv()
 
 # Streamlit Cloud 의 secrets 를 환경변수로 미러링해서 core/llm_client 가 변경 없이 동작하도록.
 try:
-    for key in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "APP_PASSWORD"):
+    for key in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_MODEL", "APP_PASSWORD"):
         if key in st.secrets and not os.environ.get(key):
             os.environ[key] = st.secrets[key]
 except Exception:
