@@ -4,6 +4,14 @@
 - **대상 페르소나**: 10년 차 전문 브랜드 마케터
 - **목적**: 특정 브랜드의 인스타그램 톤앤매너를 학습하여, 마케터가 입력한 Brief 를 해당 브랜드 보이스로 자동 카피라이팅
 
+> **Amendment (2026-05-29)**: 본 spec 은 원래 Anthropic Claude Sonnet 4.6 을 기준으로 작성되었으나, 무료 등급 우선 방침에 따라 **Google Gemini 2.5 Flash 로 전환**되었습니다. 호출 횟수·프롬프트 구조·모듈 경계는 그대로이며, 변경 사항은:
+> - `core/claude_client.py` → `core/llm_client.py` (`ClaudeClient` → `LLMClient`)
+> - `anthropic` SDK → `google-genai` SDK
+> - `tool_use` JSON 강제 → Gemini `function_calling` (mode=ANY) 로 동일 목적 달성
+> - `ANTHROPIC_API_KEY` → `GEMINI_API_KEY`
+>
+> 본문의 "Claude" 표기는 모두 "LLM" 또는 "Gemini" 로 읽어주세요. 품질이 부족하면 `core/llm_client.py` 내부만 다시 Claude(또는 다른 모델)로 교체 가능하도록 인터페이스가 유지되었습니다.
+
 ---
 
 ## 1. 시스템 구조

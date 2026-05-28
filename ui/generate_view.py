@@ -9,7 +9,7 @@ from typing import Any
 
 import streamlit as st
 
-from core.claude_client import ClaudeClient
+from core.llm_client import LLMClient
 from core.generate import proofread, write_captions
 from storage.models import BrandProfile
 from storage.repo import BrandRepo
@@ -19,7 +19,7 @@ from storage.repo import BrandRepo
 
 def run_full_generation(
     *,
-    client: ClaudeClient,
+    client: LLMClient,
     profile: BrandProfile,
     brief: str,
     variants: list[str] | None = None,

@@ -16,6 +16,6 @@ def tmp_data_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def mock_claude_client() -> MagicMock:
-    """ClaudeClient 모킹. 테스트마다 return_value 를 세팅해 사용."""
+def mock_llm_client() -> MagicMock:
+    """LLMClient 모킹. 테스트마다 return_value 를 세팅해 사용."""
     return MagicMock()

@@ -3,6 +3,8 @@
 10년 차 마케터의 워크플로우에 맞춘 1인용 Streamlit 도구.
 브랜드 IG 톤을 한 번 학습해두면, Brief 만 넣어 3개 변종(감성·정보·이벤트 강조) 카피를 즉시 생성.
 
+**LLM**: Google Gemini 2.5 Flash (무료 등급 활용). 분석·생성·맞춤법 교정 모두 동일 모델.
+
 ## 빠른 시작
 
 이 저장소의 가상환경은 관행적인 `.venv/` 가 아닌 `sns_mention/` 디렉토리입니다.
@@ -20,7 +22,7 @@ uv sync --extra dev
 
 # 환경변수 설정 (.env 파일에)
 Copy-Item .env.example .env
-# .env 의 ANTHROPIC_API_KEY 를 채울 것
+# .env 의 GEMINI_API_KEY 를 채울 것 (https://aistudio.google.com 에서 발급)
 
 # 실행
 streamlit run app.py
@@ -29,17 +31,17 @@ streamlit run app.py
 ## 명령어
 
 ```powershell
-pytest                     # 단위 테스트 (Claude 호출 모킹)
-pytest -m integration      # 실 Claude 호출 (RUN_INTEGRATION=1 필요, 과금 발생)
+pytest                     # 단위 테스트 (Gemini 호출 모킹)
+pytest -m integration      # 실 Gemini 호출 (RUN_INTEGRATION=1 필요, 무료 등급 한도 내)
 ruff check .               # 린트
-mypy .                     # 타입 체크
+mypy core storage ui app.py  # 타입 체크
 ```
 
 ## 구조
 
 `docs/superpowers/specs/2026-05-26-sns-mention-design.md` 참조.
 
-- `core/` — Claude 호출 / 수집 / 분석 / 생성 (UI 와 분리)
+- `core/` — LLM 호출 / 수집 / 분석 / 생성 (UI 와 분리)
 - `storage/` — JSON 파일 기반 브랜드 프로필 저장소
 - `ui/` — Streamlit 사이드바·등록 위저드·생성 화면
 
@@ -56,7 +58,8 @@ mypy .                     # 타입 체크
 
 ### 사전 준비
 - GitHub 계정 + 이 저장소(public OK)
-- Anthropic Console 에서 발급한 `ANTHROPIC_API_KEY`
+- Google AI Studio 에서 발급한 `GEMINI_API_KEY` — https://aistudio.google.com → "Get API key"
+  - 무료 등급: 분당 15회, 일일 1,500회 호출 한도 (Gemini 2.5 Flash 기준)
 - 팀원들과 공유할 임의의 비밀번호 1개
 
 ### 배포 절차
@@ -65,7 +68,7 @@ mypy .                     # 타입 체크
 2. **"New app"** → 본 저장소(`sns_mention`) + 브랜치(`main` 또는 `feature/sns-mention-mvp`) + 메인 파일 `app.py` 선택 → **Deploy**.
 3. 배포 진행 중 우측 상단 메뉴 → **App settings → Secrets** 클릭 후 다음을 붙여넣고 저장:
    ```toml
-   ANTHROPIC_API_KEY = "sk-ant-..."
+   GEMINI_API_KEY = "your-google-ai-studio-key"
    APP_PASSWORD = "팀원들과 공유할 비밀번호"
    ```
    (이 두 값은 `.streamlit/secrets.toml.example` 형식 그대로입니다.)
@@ -75,6 +78,7 @@ mypy .                     # 타입 체크
 
 - **브랜드 프로필 저장은 휘발성입니다.** Streamlit Cloud 무료 티어는 컨테이너가 재시작되면 `storage/data/brands/` 파일이 사라집니다. 즉, 앱 재배포·휴면 후 깨어날 때 등록된 브랜드를 다시 등록해야 합니다.
 - **단일 비밀번호 + 공유 라이브러리 모델입니다.** 팀원별 데이터 분리, 사용량 미터링은 v2 작업으로 별도 진행해야 합니다.
+- **Gemini 2.5 Flash 무료 등급은 일 1,500회 호출 한도**. 한 번의 카피 생성 = 분석 1회 (등록 시 1번) + 생성 2회 = 합 3회. 일일 ~500개 카피 생성까지는 무료. 한도 넘으면 다음 날까지 대기 또는 유료 등급 업그레이드.
 - 본격 운영 단계에 들어가면 Supabase·Postgres 등의 영구 저장소를 붙이는 마이그레이션을 권장합니다.
 
 ### 로컬에서도 비밀번호 게이트 시험

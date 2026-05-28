@@ -22,9 +22,9 @@ from ui.sidebar import render_sidebar
 
 load_dotenv()
 
-# Streamlit Cloud 의 secrets 를 환경변수로 미러링해서 core/claude_client 가 변경 없이 동작하도록.
+# Streamlit Cloud 의 secrets 를 환경변수로 미러링해서 core/llm_client 가 변경 없이 동작하도록.
 try:
-    for key in ("ANTHROPIC_API_KEY", "APP_PASSWORD"):
+    for key in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "APP_PASSWORD"):
         if key in st.secrets and not os.environ.get(key):
             os.environ[key] = st.secrets[key]
 except Exception:
@@ -78,13 +78,13 @@ def main() -> None:
 
     mode = st.session_state.mode
     if mode == "register":
-        from core.claude_client import ClaudeClient
+        from core.llm_client import LLMClient
         from ui.register_view import render_register_view
-        render_register_view(repo, client_factory=ClaudeClient)
+        render_register_view(repo, client_factory=LLMClient)
     elif mode == "generate":
-        from core.claude_client import ClaudeClient
+        from core.llm_client import LLMClient
         from ui.generate_view import render_generate_view
-        render_generate_view(repo, client_factory=ClaudeClient)
+        render_generate_view(repo, client_factory=LLMClient)
     else:
         st.title("브랜드 맞춤형 인스타그램 캡션 생성기")
         st.write("왼쪽 사이드바에서 브랜드를 선택하거나 새로 등록하세요.")

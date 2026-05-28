@@ -12,7 +12,7 @@ import streamlit as st
 from pydantic import ValidationError
 
 from core.analyze import extract_profile
-from core.claude_client import ClaudeClient
+from core.llm_client import LLMClient
 from core.ingest import IngestError, crawl_instagram, parse_pasted_posts
 from storage.models import (
     BrandProfile,
@@ -51,7 +51,7 @@ def parse_must_use_input(text: str) -> list[MustUseName]:
 
 def run_analysis(
     *,
-    client: ClaudeClient,
+    client: LLMClient,
     posts: list[str],
     brand_name: str,
     brand_rules: BrandRules,
@@ -64,7 +64,7 @@ def run_analysis(
 # --- Streamlit 렌더 ----------------------------------------------------------
 
 def render_register_view(repo: BrandRepo, client_factory) -> None:
-    """3-step wizard. client_factory 는 ClaudeClient 를 lazy 생성."""
+    """3-step wizard. client_factory 는 LLMClient 를 lazy 생성."""
     step = st.session_state.get("register_step", 1)
     st.header(f"새 브랜드 등록 — Step {step}/3")
 

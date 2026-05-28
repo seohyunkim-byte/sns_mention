@@ -1,12 +1,12 @@
 """인스타그램 게시물 묶음에서 브랜드 톤 프로필을 추출한다.
 
-이 모듈은 `core.claude_client.ClaudeClient` 만 의존한다. ingest/generate 와 상호 import 금지.
+이 모듈은 `core.llm_client.LLMClient` 만 의존한다. ingest/generate 와 상호 import 금지.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from core.claude_client import ClaudeClient
+from core.llm_client import LLMClient
 from storage.models import BrandRules
 
 
@@ -100,7 +100,7 @@ def build_analyze_prompt(
 
 def extract_profile(
     *,
-    client: ClaudeClient,
+    client: LLMClient,
     posts: list[str],
     brand_name: str,
     brand_rules: BrandRules,

@@ -1,12 +1,12 @@
 """브랜드 프로필 + Brief → 3개 카피 변종 + 한글 맞춤법 교정.
 
-이 모듈은 `core.claude_client.ClaudeClient` 만 의존한다. ingest/analyze 와 상호 import 금지.
+이 모듈은 `core.llm_client.LLMClient` 만 의존한다. ingest/analyze 와 상호 import 금지.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from core.claude_client import ClaudeClient
+from core.llm_client import LLMClient
 from storage.models import BrandProfile, BrandRules
 
 
@@ -125,7 +125,7 @@ emit_variants 도구로 JSON 을 반환하라."""
 
 def write_captions(
     *,
-    client: ClaudeClient,
+    client: LLMClient,
     profile: BrandProfile,
     brief: str,
     variants: list[str] | None = None,
@@ -157,7 +157,7 @@ def _format_must_use_from_rules(rules: BrandRules) -> str:
 
 def proofread(
     *,
-    client: ClaudeClient,
+    client: LLMClient,
     captions: list[dict[str, Any]],
     brand_rules: BrandRules,
 ) -> list[dict[str, Any]]:

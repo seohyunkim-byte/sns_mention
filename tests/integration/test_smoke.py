@@ -1,4 +1,4 @@
-"""실제 Claude 호출 통합 테스트.
+"""실제 Gemini 호출 통합 테스트.
 
 RUN_INTEGRATION=1 환경에서만 실행. 키 누락 시 자동 skip.
 """
@@ -8,22 +8,22 @@ import os
 
 import pytest
 
-from core.claude_client import ClaudeClient
+from core.llm_client import LLMClient
 
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def client() -> ClaudeClient:
+def client() -> LLMClient:
     if os.environ.get("RUN_INTEGRATION") != "1":
         pytest.skip("RUN_INTEGRATION=1 필요")
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY 필요")
-    return ClaudeClient()
+    if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
+        pytest.skip("GEMINI_API_KEY (또는 GOOGLE_API_KEY) 필요")
+    return LLMClient()
 
 
-def test_call_tool_real_returns_schema_compliant_dict(client: ClaudeClient):
+def test_call_tool_real_returns_schema_compliant_dict(client: LLMClient):
     schema = {
         "type": "object",
         "required": ["answer"],
@@ -37,4 +37,4 @@ def test_call_tool_real_returns_schema_compliant_dict(client: ClaudeClient):
     )
     assert isinstance(result, dict)
     assert "answer" in result
-    assert "서울" in result["answer"]
+    assert "서울" in result["answer"] or "Seoul" in result["answer"]

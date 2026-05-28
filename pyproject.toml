@@ -5,7 +5,7 @@ description = "브랜드 맞춤형 인스타그램 캡션 자동 생성기 (MVP)
 requires-python = ">=3.12"
 dependencies = [
     "streamlit>=1.36",
-    "anthropic>=0.45",
+    "google-genai>=0.3",
     "pydantic>=2.7",
     "instaloader>=4.13",
     "python-dotenv>=1.0",

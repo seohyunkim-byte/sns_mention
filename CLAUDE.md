@@ -18,13 +18,13 @@ The parent `../CLAUDE.md` defines four operating principles (Think Before Coding
 
 Streamlit-based personal tool for a brand marketer. Learns a brand's Instagram voice from existing posts, then generates 3 caption variants (감성 / 정보 / 이벤트 강조) from a marketer-supplied Brief.
 
-Stack: Streamlit + Anthropic Claude Sonnet 4.6 + Pydantic + instaloader (best-effort crawler) + JSON file storage. No DB, no auth, single user.
+Stack: Streamlit + Google Gemini 2.5 Flash + Pydantic + instaloader (best-effort crawler) + JSON file storage. No DB, no auth, single user (or password-gated small team via Streamlit Cloud).
 
 LLM call shape:
-- Brand registration: 1 Claude call (analyze posts → tone profile JSON).
-- Caption generation: 2 Claude calls (generate 3 variants → Korean spellcheck/forbidden-word pass).
+- Brand registration: 1 LLM call (analyze posts → tone profile JSON).
+- Caption generation: 2 LLM calls (generate 3 variants → Korean spellcheck/forbidden-word pass).
 
-All Claude calls go through `core/claude_client.py` (single point for retry, logging, mocking).
+All LLM calls go through `core/llm_client.py` (single point for retry, logging, mocking). Originally Claude Sonnet 4.6; switched to Gemini 2.5 Flash to leverage the free tier (1,500 req/day). The class name (`LLMClient`) is provider-agnostic so a future swap stays surgical.
 
 ## Environment
 
@@ -34,7 +34,7 @@ All Claude calls go through `core/claude_client.py` (single point for retry, log
   ```powershell
   .\sns_mention\Scripts\Activate.ps1
   ```
-- **Secrets**: `.env` with `ANTHROPIC_API_KEY=...` (gitignored once implementation begins).
+- **Secrets**: `.env` with `GEMINI_API_KEY=...` (gitignored). Also accepts `GOOGLE_API_KEY` as alias.
 
 ## Commands (once `pyproject.toml` exists per spec §7)
 
@@ -53,7 +53,7 @@ These commands don't work yet — they're the contract the implementation should
 - Module boundaries are load-bearing: `core/ingest`, `core/analyze`, `core/generate` must not import each other. UI imports only `core/*`, never the other way around.
 - Brand profile JSON schema is defined in spec §2 — implement it as Pydantic models in `storage/repo.py` and validate on every load. A schema-violating file should surface as a warning in the sidebar, not a crash.
 - `brand_rules` (forbidden phrases, must-use names, tone guardrails) is marketer-input, not LLM-extracted. It is supplied to the analyze prompt (to filter `example_posts`) AND to the generate prompt (as hard constraints) AND to the proofread prompt (as final guard).
-- Korean spellcheck is a separate Claude call by design — keep it that way. Single-pass generation has been ruled out.
+- Korean spellcheck is a separate LLM call by design — keep it that way. Single-pass generation has been ruled out.
 
 ## Conventions specific to this repo
 
