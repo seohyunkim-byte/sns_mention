@@ -49,7 +49,7 @@ class LLMClient:
         api_key: str | None = None,
         model: str = DEFAULT_MODEL,
         max_retries: int = 3,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ):
         if sdk is None:
             key = (
@@ -86,6 +86,10 @@ class LLMClient:
                 )
             ]
         )
+        # Gemini 2.5 Flash 는 기본으로 "thinking" 토큰을 max_output_tokens 에서 소비한다.
+        # 함수 호출 강제 시나리오에서는 reasoning 이 필요 없고, thinking 이 길어지면
+        # function_call 을 발화하기 전에 토큰 한도가 차서 빈 응답이 나올 수 있다.
+        # thinking_budget=0 으로 비활성화해서 출력 토큰 예산을 모두 실제 응답에 사용한다.
         config = genai_types.GenerateContentConfig(
             system_instruction=system,
             tools=[tool],
@@ -95,6 +99,7 @@ class LLMClient:
                     allowed_function_names=[tool_name],
                 )
             ),
+            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
             max_output_tokens=self.max_tokens,
         )
 
@@ -130,4 +135,33 @@ class LLMClient:
                 fc = getattr(part, "function_call", None)
                 if fc and fc.name == tool_name:
                     return dict(fc.args or {})
-        raise LLMError("no function_call block in response")
+
+        # 진단 정보 — finish_reason 과 텍스트 내용을 에러 메시지에 포함시켜 어떤 상황인지 파악 가능하게.
+        diag = _diagnose_no_function_call(response)
+        logger.error("llm.call_tool no function_call model=%s tool=%s diag=%s",
+                     self.model, tool_name, diag)
+        raise LLMError(f"no function_call block in response ({diag})")
+
+
+def _diagnose_no_function_call(response: Any) -> str:
+    """function_call 누락 시 에러에 붙일 진단 문자열을 만든다."""
+    if not getattr(response, "candidates", None):
+        return "empty candidates"
+    cand = response.candidates[0]
+    parts: list[str] = []
+    finish = getattr(cand, "finish_reason", None)
+    if finish:
+        parts.append(f"finish_reason={finish}")
+    content = getattr(cand, "content", None)
+    text_chunks: list[str] = []
+    if content:
+        for part in getattr(content, "parts", None) or []:
+            text = getattr(part, "text", None)
+            if isinstance(text, str) and text:
+                text_chunks.append(text)
+    if text_chunks:
+        joined = "".join(text_chunks).strip()
+        if len(joined) > 300:
+            joined = joined[:300] + "..."
+        parts.append(f"text={joined!r}")
+    return " ".join(parts) or "empty response"
