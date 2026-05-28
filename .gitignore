@@ -11,6 +11,9 @@ __pycache__/
 .env
 sns_mention/
 
+# Streamlit secrets (절대 커밋 금지 — example 파일은 별도로 추적)
+.streamlit/secrets.toml
+
 # Brand data (개인 데이터, 공유 금지)
 storage/data/brands/*.json
 !storage/data/brands/.gitkeep
