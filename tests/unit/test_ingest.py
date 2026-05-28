@@ -1,9 +1,11 @@
 """core/ingest.py 단위 테스트 — paste/URL 파서."""
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from core.ingest import IngestError, extract_ig_handle, parse_pasted_posts
+from core.ingest import IngestError, crawl_instagram, extract_ig_handle, parse_pasted_posts
 
 
 def test_parse_pasted_posts_basic():
@@ -49,11 +51,6 @@ def test_extract_ig_handle_at_prefix():
 def test_extract_ig_handle_invalid_returns_none():
     assert extract_ig_handle("not a url") is None
     assert extract_ig_handle("") is None
-
-
-from unittest.mock import MagicMock, patch
-
-from core.ingest import crawl_instagram
 
 
 def _make_post(caption: str | None) -> MagicMock:

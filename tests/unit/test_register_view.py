@@ -1,10 +1,7 @@
 """ui/register_view.py 의 비-UI 헬퍼 테스트."""
 from __future__ import annotations
 
-from datetime import datetime
 from unittest.mock import MagicMock
-
-import pytest
 
 from storage.models import BrandRules, MustUseName
 from ui.register_view import (

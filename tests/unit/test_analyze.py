@@ -1,10 +1,7 @@
 """core/analyze.py 단위 테스트."""
 from __future__ import annotations
 
-from datetime import datetime
 from unittest.mock import MagicMock
-
-import pytest
 
 from core.analyze import ANALYZE_SCHEMA, build_analyze_prompt, extract_profile
 from storage.models import BrandRules, MustUseName

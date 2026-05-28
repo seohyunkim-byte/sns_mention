@@ -4,9 +4,13 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock
 
-import pytest
-
-from core.generate import GENERATE_SCHEMA, build_generate_prompt, write_captions
+from core.generate import (
+    GENERATE_SCHEMA,
+    PROOFREAD_SCHEMA,
+    build_generate_prompt,
+    proofread,
+    write_captions,
+)
 from storage.models import (
     BrandProfile,
     BrandRules,
@@ -101,9 +105,6 @@ def test_write_captions_passes_extra_instruction():
         extra_instruction="더 부드럽게",
     )
     assert "더 부드럽게" in client.call_tool.call_args.kwargs["user"]
-
-
-from core.generate import PROOFREAD_SCHEMA, proofread
 
 
 def test_proofread_returns_corrected_variants():

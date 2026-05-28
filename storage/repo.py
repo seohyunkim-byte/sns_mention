@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import builtins
 import json
 import re
 from pathlib import Path
@@ -67,9 +68,9 @@ class BrandRepo:
         profiles, _ = self.list_with_warnings()
         return profiles
 
-    def list_with_warnings(self) -> tuple[list[BrandProfile], list[str]]:
-        profiles: list[BrandProfile] = []
-        warnings: list[str] = []
+    def list_with_warnings(self) -> tuple[builtins.list[BrandProfile], builtins.list[str]]:
+        profiles: builtins.list[BrandProfile] = []
+        warnings: builtins.list[str] = []
         for p in sorted(self.data_dir.glob("*.json")):
             try:
                 profiles.append(self.load(p.stem))
