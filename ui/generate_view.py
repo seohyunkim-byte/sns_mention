@@ -92,6 +92,7 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
                 st.error(f"생성 실패: {e}")
                 return
         st.session_state.last_results = results
+        st.session_state.last_brief = brief  # 재생성 시 원본 Brief 사용
         st.success("✓ 맞춤법 검증 완료")
 
     results = st.session_state.get("last_results") or []
@@ -120,7 +121,7 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
                             new_variants = run_full_generation(
                                 client=client_factory(),
                                 profile=profile,
-                                brief=brief,
+                                brief=st.session_state.get("last_brief", brief),
                                 variants=[label],
                                 extra_instruction=extra,
                             )

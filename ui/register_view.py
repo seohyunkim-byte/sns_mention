@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 import streamlit as st
+from pydantic import ValidationError
 
 from core.analyze import extract_profile
 from core.claude_client import ClaudeClient
@@ -198,23 +199,33 @@ def _render_step3_review(repo: BrandRepo, client_factory) -> None:
 
     if st.button("저장", type="primary"):
         slug = repo.unique_slug(BrandRepo.slugify(data["brand_name"]))
-        profile = BrandProfile(
-            meta=Meta(
-                brand_name=data["brand_name"],
-                slug=slug,
-                source_url=st.session_state.get("source_url", ""),
-                analyzed_at=datetime.now(),
-                post_count=len(posts),
-                model_version="claude-sonnet-4-6",
-            ),
-            voice=Voice.model_validate(profile_dict["voice"]),
-            emoji=Emoji.model_validate(profile_dict["emoji"]),
-            hashtag=Hashtag.model_validate(profile_dict["hashtag"]),
-            formatting=Formatting.model_validate(profile_dict["formatting"]),
-            topics=profile_dict.get("topics", []),
-            brand_rules=brand_rules,
-            example_posts=profile_dict.get("example_posts", []),
-        )
+        try:
+            profile = BrandProfile(
+                meta=Meta(
+                    brand_name=data["brand_name"],
+                    slug=slug,
+                    source_url=st.session_state.get("source_url", ""),
+                    analyzed_at=datetime.now(),
+                    post_count=len(posts),
+                    model_version="claude-sonnet-4-6",
+                ),
+                voice=Voice.model_validate(profile_dict["voice"]),
+                emoji=Emoji.model_validate(profile_dict["emoji"]),
+                hashtag=Hashtag.model_validate(profile_dict["hashtag"]),
+                formatting=Formatting.model_validate(profile_dict["formatting"]),
+                topics=profile_dict.get("topics", []),
+                brand_rules=brand_rules,
+                example_posts=profile_dict.get("example_posts", []),
+            )
+        except (KeyError, ValidationError) as e:
+            st.error(f"분석 결과 스키마 위반: {e}")
+            st.caption("Claude 응답이 예상 형식과 맞지 않습니다. 위 JSON 을 확인하고 '이전' 으로 돌아가 재분석하세요.")
+            if st.button("← Step 2 로 돌아가기"):
+                st.session_state.register_step = 2
+                st.session_state.analysis_done = False
+                st.rerun()
+            return
+
         repo.save(profile)
         st.success(f"저장됨: {slug}.json")
         st.session_state.mode = "generate"

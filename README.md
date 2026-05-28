@@ -5,15 +5,21 @@
 
 ## 빠른 시작
 
+이 저장소의 가상환경은 관행적인 `.venv/` 가 아닌 `sns_mention/` 디렉토리입니다.
+`uv sync` 가 기본으로 `.venv/` 를 만들지 않도록 환경변수를 먼저 설정하세요.
+
 ```powershell
-# 의존성 설치
-uv sync
+# 가상환경 위치 지정 (PowerShell)
+$env:UV_PROJECT_ENVIRONMENT = "sns_mention"
+
+# 의존성 설치 (개발 도구 포함)
+uv sync --extra dev
 
 # 가상환경 활성화
 .\sns_mention\Scripts\Activate.ps1
 
 # 환경변수 설정 (.env 파일에)
-cp .env.example .env
+Copy-Item .env.example .env
 # .env 의 ANTHROPIC_API_KEY 를 채울 것
 
 # 실행
