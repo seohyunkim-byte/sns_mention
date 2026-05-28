@@ -101,3 +101,40 @@ def test_write_captions_passes_extra_instruction():
         extra_instruction="더 부드럽게",
     )
     assert "더 부드럽게" in client.call_tool.call_args.kwargs["user"]
+
+
+from core.generate import PROOFREAD_SCHEMA, proofread
+
+
+def test_proofread_returns_corrected_variants():
+    client = MagicMock()
+    client.call_tool.return_value = {
+        "variants": [
+            {"label": "감성", "caption": "오늘도 한 걸음 더. 🔥", "hashtags": ["#나이키"]},
+        ]
+    }
+
+    rules = BrandRules(forbidden_phrases=["최고의"])
+    captions = [{"label": "감성", "caption": "오늘도 한 걸음더 🔥", "hashtags": ["#나이키"]}]
+
+    result = proofread(client=client, captions=captions, brand_rules=rules)
+    assert result[0]["caption"] == "오늘도 한 걸음 더. 🔥"
+
+    kwargs = client.call_tool.call_args.kwargs
+    assert kwargs["tool_name"] == "emit_proofread"
+    assert kwargs["tool_schema"] == PROOFREAD_SCHEMA
+    assert "최고의" in kwargs["system"]
+    assert "맞춤법" in kwargs["system"]
+
+
+def test_proofread_passes_original_captions_in_user_prompt():
+    client = MagicMock()
+    client.call_tool.return_value = {"variants": []}
+    captions = [
+        {"label": "감성", "caption": "원문 1", "hashtags": []},
+        {"label": "정보", "caption": "원문 2", "hashtags": []},
+    ]
+    proofread(client=client, captions=captions, brand_rules=BrandRules())
+    user_prompt = client.call_tool.call_args.kwargs["user"]
+    assert "원문 1" in user_prompt
+    assert "원문 2" in user_prompt

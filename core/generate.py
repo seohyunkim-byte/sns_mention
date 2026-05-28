@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.claude_client import ClaudeClient
-from storage.models import BrandProfile
+from storage.models import BrandProfile, BrandRules
 
 
 _VARIANT_DESCRIPTIONS = {
@@ -141,5 +141,52 @@ def write_captions(
         user=user,
         tool_name="emit_variants",
         tool_schema=GENERATE_SCHEMA,
+    )
+    return list(result.get("variants", []))
+
+
+PROOFREAD_SCHEMA: dict[str, Any] = GENERATE_SCHEMA  # 동일 구조
+
+
+def _format_must_use_from_rules(rules: BrandRules) -> str:
+    items = rules.must_use_names
+    if not items:
+        return "(없음)"
+    return "; ".join(f"{m.term} ({m.note})" if m.note else m.term for m in items)
+
+
+def proofread(
+    *,
+    client: ClaudeClient,
+    captions: list[dict[str, Any]],
+    brand_rules: BrandRules,
+) -> list[dict[str, Any]]:
+    """카피 3개를 받아 한글 맞춤법·금지어·정확표기 교정 후 동일 구조로 반환."""
+    forbidden = ", ".join(brand_rules.forbidden_phrases) or "(없음)"
+    must_use = _format_must_use_from_rules(brand_rules)
+
+    system = f"""\
+당신은 한국어 교정 전문가다.
+아래 카피들을 검토하여 다음만 수정하라:
+1. 맞춤법·띄어쓰기 오류 (국립국어원 기준)
+2. 자주 틀리는 케이스: 되/돼, 안/않, 률/율, 어색한 외래어 표기
+3. 금지 표현 [{forbidden}] 포함 시 자연스럽게 치환
+4. 정확 표기 [{must_use}] 위반 시 교정
+
+수정 없으면 원문 그대로 반환. 의역·재창작·톤 변경 금지. 오직 교정만.
+같은 label·hashtags 를 유지하고 caption 만 손볼 것."""
+
+    user_parts: list[str] = []
+    for c in captions:
+        user_parts.append(f"[{c.get('label', '')}]")
+        user_parts.append(c.get("caption", ""))
+        user_parts.append("---")
+    user_parts.append("emit_proofread 도구로 동일 JSON 구조를 반환하라.")
+
+    result = client.call_tool(
+        system=system,
+        user="\n".join(user_parts),
+        tool_name="emit_proofread",
+        tool_schema=PROOFREAD_SCHEMA,
     )
     return list(result.get("variants", []))
