@@ -41,13 +41,15 @@ class LLMClient:
     """
 
     # Google 무료 등급이 모델별로 자주 변경되므로, 단일 모델 의존 X.
-    # 첫 모델이 quota 초과(429 RESOURCE_EXHAUSTED) 시 다음 모델로 자동 폴백.
+    # 429 (quota) 또는 404 (모델이 본 계정/리전에서 미제공) 시 다음 모델로 자동 폴백.
     # 환경변수 GEMINI_MODEL 이 설정되면 그 단일 모델만 사용 (폴백 X — 사용자 명시 선택 존중).
     DEFAULT_MODEL_CHAIN: tuple[str, ...] = (
         "gemini-2.0-flash-lite",   # 2.0 lite — 무료 한도 비교적 넓음
         "gemini-2.5-flash-lite",   # 2.5 lite — 일 20~1000회 (시점에 따라 변동)
-        "gemini-1.5-flash-8b",     # 1.5 8b — 가장 작은 legacy, 무료 한도 보장
-        "gemini-1.5-flash",        # 1.5 flash — 마지막 보루
+        "gemini-flash-latest",     # 현재 권장 별칭 — Google 이 안정 모델 자동 선택
+        "gemini-2.5-flash",        # 일 20회 (자주 한도지만 다른 모델 다 막혔으면 시도)
+        "gemini-1.5-flash",        # 1.5 legacy — 일부 계정에서 가용
+        "gemini-1.5-flash-8b",     # 1.5 8b — 일부 계정 가용 (없으면 404 → 다음으로)
     )
     DEFAULT_MODEL = DEFAULT_MODEL_CHAIN[0]  # 첫 모델 = 기본
 
@@ -92,10 +94,10 @@ class LLMClient:
     ) -> dict[str, Any]:
         """function calling 으로 JSON 출력 강제. 도구 입력 dict 를 반환.
 
-        model_chain 의 모델을 순서대로 시도. 어떤 모델이 quota 초과(429)면
-        다음 모델로 자동 폴백. 모든 모델이 막혔을 때만 LLMError.
+        model_chain 의 모델을 순서대로 시도. 429 (quota) 또는 404 (모델 미제공)
+        시 다음 모델로 자동 폴백. 모든 모델이 막혔을 때만 LLMError.
         """
-        last_quota_error: LLMError | None = None
+        last_recoverable_error: LLMError | None = None
         for model in self.model_chain:
             try:
                 return self._call_one_model(
@@ -106,19 +108,20 @@ class LLMClient:
                     tool_schema=tool_schema,
                 )
             except LLMError as e:
-                if _is_quota_exhausted(e):
+                if _should_fallback_to_next_model(e):
                     logger.warning(
-                        "llm.call_tool quota exhausted on %s, falling back: %s",
+                        "llm.call_tool model %s unavailable, falling back: %s",
                         model, e,
                     )
-                    last_quota_error = e
+                    last_recoverable_error = e
                     continue
                 raise
-        # 모든 모델이 quota 초과
+        # 모든 모델이 막힘
         raise LLMError(
-            f"All models in chain exhausted free-tier quota. "
-            f"Last error: {last_quota_error}. "
-            f"Try again after midnight UTC or override GEMINI_MODEL secret."
+            f"체인의 모든 모델이 사용 불가합니다. "
+            f"마지막 에러: {last_recoverable_error}. "
+            f"UTC 자정(한국 시간 오전 9시) 이후 한도가 리셋되면 재시도하거나, "
+            f"GEMINI_MODEL secret 으로 특정 모델을 강제 지정하세요."
         )
 
     def _call_one_model(
@@ -202,15 +205,38 @@ class LLMClient:
         raise LLMError(f"no function_call block in response ({diag})")
 
 
-def _is_quota_exhausted(error: Exception) -> bool:
-    """LLMError 메시지에서 429/RESOURCE_EXHAUSTED 패턴을 감지."""
+def _should_fallback_to_next_model(error: Exception) -> bool:
+    """체인의 다음 모델로 폴백해야 하는 에러인지 판단.
+
+    포함 케이스:
+      - 429 / RESOURCE_EXHAUSTED — quota 초과 (일시적, 다음 모델로 시도)
+      - 404 NOT_FOUND — 해당 계정·리전에서 모델 미제공 (영구, 다음 모델로 시도)
+      - "not supported for generateContent" — 모델이 이 작업 지원 안 함
+
+    비포함 (즉시 raise) 케이스:
+      - 401/403 — 인증 문제 (API 키 잘못)
+      - 400 — 잘못된 요청 (스키마·페이로드 문제)
+      - 500+ — 서버 오류는 tenacity 가 이미 재시도하므로 여기까지 오면 진짜 장애
+    """
     msg = str(error)
-    return (
-        "RESOURCE_EXHAUSTED" in msg
-        or "429" in msg
-        or "exceeded your current quota" in msg.lower()
-        or "free_tier" in msg.lower()
-    )
+    msg_lower = msg.lower()
+    # quota
+    if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
+        return True
+    if "exceeded your current quota" in msg_lower or "free_tier" in msg_lower:
+        return True
+    # model not found / not supported
+    if "404" in msg or "NOT_FOUND" in msg:
+        return True
+    if "not found for api version" in msg_lower:
+        return True
+    if "not supported for generatecontent" in msg_lower:
+        return True
+    return False
+
+
+# 하위 호환 — 외부 코드가 이전 함수명을 import 할 가능성 대비.
+_is_quota_exhausted = _should_fallback_to_next_model
 
 
 def _extract_json_from_text(response: Any) -> dict[str, Any] | None:
