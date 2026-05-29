@@ -48,7 +48,13 @@ def _append_history(
     results: list[dict[str, Any]],
     extra_instruction: str = "",
 ) -> BrandProfile:
-    """방금 생성된 카피를 BrandProfile.caption_history 에 누적 저장."""
+    """방금 생성된 카피를 BrandProfile.caption_history 에 누적 저장.
+
+    저장 실패 시(예: Supabase 권한·RLS 오류) 메모리상 history 는 갱신하지만
+    영구 저장만 못 한 상태로 둔다. 화면에는 경고 표시.
+    """
+    from storage.repo import RepoError
+
     entry = CaptionGeneration(
         generated_at=datetime.now(),
         brief=brief,
@@ -57,7 +63,10 @@ def _append_history(
         model_version=LLMClient.DEFAULT_MODEL,
     )
     profile.caption_history.append(entry)
-    repo.save(profile)
+    try:
+        repo.save(profile)
+    except RepoError as e:
+        st.warning(f"⚠️ 카피는 생성되었지만 히스토리 영구 저장에 실패했습니다: {e}")
     return profile
 
 

@@ -226,7 +226,22 @@ def _render_step3_review(repo: BrandRepo, client_factory) -> None:
                 st.rerun()
             return
 
-        repo.save(profile)
+        from storage.repo import RepoError
+        try:
+            repo.save(profile)
+        except RepoError as e:
+            st.error(f"저장소 오류: {e}")
+            st.caption(
+                "Supabase 가 거부했습니다. 가능한 원인: "
+                "(1) SQL Editor 에서 'alter table brand_profiles disable row level security;' 미실행, "
+                "(2) SUPABASE_URL/KEY 값 잘못, "
+                "(3) brand_profiles 테이블 없음. README 의 Supabase 세팅 섹션 참고."
+            )
+            return
+        except Exception as e:
+            st.error(f"저장 실패 (예상치 못한 오류): {type(e).__name__}: {e}")
+            return
+
         st.success(f"저장됨: {slug}.json")
         st.session_state.mode = "generate"
         st.session_state.current_slug = slug
