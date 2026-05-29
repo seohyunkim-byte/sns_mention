@@ -106,6 +106,9 @@ def main() -> None:
         from core.llm_client import LLMClient
         from ui.generate_view import render_generate_view
         render_generate_view(repo, client_factory=LLMClient)
+    elif mode == "edit":
+        from ui.edit_view import render_edit_view
+        render_edit_view(repo)
     else:
         st.title("브랜드 맞춤형 인스타그램 캡션 생성기")
         st.write("왼쪽 사이드바에서 브랜드를 선택하거나 새로 등록하세요.")

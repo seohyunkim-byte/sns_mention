@@ -16,7 +16,7 @@ def load_brand_options(repo: BrandRepo) -> tuple[list[BrandProfile], list[str]]:
     return repo.list_with_warnings()
 
 
-_GENERATE_STATE_KEYS = ("last_results", "last_brief", "brief_input")
+_GENERATE_STATE_KEYS = ("last_results", "last_brief", "brief_input", "confirm_delete_slug")
 
 
 def _clear_generate_state() -> None:
