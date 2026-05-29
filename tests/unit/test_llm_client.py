@@ -182,3 +182,116 @@ def test_call_tool_fallback_returns_error_when_text_has_no_json():
             system="s", user="u", tool_name="t",
             tool_schema={"type": "object"},
         )
+
+
+# --- 모델 체인 폴백 (429 / quota exhausted) ----------------------------------
+
+def _quota_exhausted_error() -> Exception:
+    """429 RESOURCE_EXHAUSTED 시뮬레이션."""
+    from google.genai import errors as genai_errors
+
+    return genai_errors.ClientError(
+        code=429,
+        response_json={
+            "error": {
+                "code": 429,
+                "message": "Quota exceeded for free_tier_requests",
+                "status": "RESOURCE_EXHAUSTED",
+            }
+        },
+    )
+
+
+def _success_function_call_response(args: dict) -> MagicMock:
+    response = MagicMock()
+    part = MagicMock()
+    fc = MagicMock()
+    fc.name = "t"
+    fc.args = args
+    part.function_call = fc
+    content = MagicMock()
+    content.parts = [part]
+    candidate = MagicMock()
+    candidate.content = content
+    response.candidates = [candidate]
+    return response
+
+
+def test_call_tool_falls_back_to_next_model_on_quota_exhausted():
+    """첫 모델이 429 면 다음 모델로 자동 시도."""
+    sdk = MagicMock()
+    # 첫 호출은 quota error, 두 번째 호출은 성공
+    sdk.models.generate_content.side_effect = [
+        _quota_exhausted_error(),
+        _success_function_call_response({"ok": True}),
+    ]
+    # GEMINI_MODEL 미설정 → DEFAULT_MODEL_CHAIN 사용
+    import os as _os
+    _os.environ.pop("GEMINI_MODEL", None)
+    client = LLMClient(sdk=sdk, max_retries=1)
+    # 모델 체인이 2개 이상이어야 fallback 테스트 의미가 있음
+    assert len(client.model_chain) >= 2
+
+    result = client.call_tool(
+        system="s", user="u", tool_name="t",
+        tool_schema={"type": "object"},
+    )
+    assert result == {"ok": True}
+    # 두 번 호출되었어야 함 (첫 모델 quota → 두 번째 모델 시도)
+    assert sdk.models.generate_content.call_count == 2
+    # 두 번의 호출이 서로 다른 모델로 갔는지 확인
+    models_used = [
+        call.kwargs.get("model") for call in sdk.models.generate_content.call_args_list
+    ]
+    assert models_used[0] != models_used[1]
+
+
+def test_call_tool_all_models_exhausted_raises():
+    """모든 모델이 quota 초과면 명확한 에러 메시지로 raise."""
+    sdk = MagicMock()
+    sdk.models.generate_content.side_effect = _quota_exhausted_error()
+    import os as _os
+    _os.environ.pop("GEMINI_MODEL", None)
+    client = LLMClient(sdk=sdk, max_retries=1)
+    with pytest.raises(LLMError, match="All models"):
+        client.call_tool(
+            system="s", user="u", tool_name="t",
+            tool_schema={"type": "object"},
+        )
+    # 체인 길이만큼 호출됐어야 함
+    assert sdk.models.generate_content.call_count == len(client.model_chain)
+
+
+def test_call_tool_explicit_model_skips_fallback_chain():
+    """사용자가 GEMINI_MODEL 명시 지정한 경우 단일 모델만 시도, 폴백 X."""
+    sdk = MagicMock()
+    sdk.models.generate_content.side_effect = _quota_exhausted_error()
+    client = LLMClient(sdk=sdk, model="gemini-2.5-flash", max_retries=1)
+    assert client.model_chain == ("gemini-2.5-flash",)
+    with pytest.raises(LLMError):
+        client.call_tool(
+            system="s", user="u", tool_name="t",
+            tool_schema={"type": "object"},
+        )
+    # 폴백 시도 없으므로 1번만 호출
+    assert sdk.models.generate_content.call_count == 1
+
+
+def test_call_tool_non_quota_error_does_not_trigger_fallback():
+    """quota 외의 에러는 즉시 raise — 다음 모델 시도 X."""
+    from google.genai import errors as genai_errors
+
+    sdk = MagicMock()
+    sdk.models.generate_content.side_effect = genai_errors.ClientError(
+        code=401, response_json={"error": {"message": "invalid api key"}}
+    )
+    import os as _os
+    _os.environ.pop("GEMINI_MODEL", None)
+    client = LLMClient(sdk=sdk, max_retries=1)
+    with pytest.raises(LLMError, match="failed"):
+        client.call_tool(
+            system="s", user="u", tool_name="t",
+            tool_schema={"type": "object"},
+        )
+    # 인증 에러는 fallback 안 함 — 1번만 호출
+    assert sdk.models.generate_content.call_count == 1
