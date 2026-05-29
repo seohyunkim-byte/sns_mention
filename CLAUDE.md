@@ -18,7 +18,7 @@ The parent `../CLAUDE.md` defines four operating principles (Think Before Coding
 
 Streamlit-based personal tool for a brand marketer. Learns a brand's Instagram voice from existing posts, then generates 3 caption variants (감성 / 정보 / 이벤트 강조) from a marketer-supplied Brief.
 
-Stack: Streamlit + Google Gemini 2.5 Flash + Pydantic + instaloader (best-effort crawler) + JSON file storage. No DB, no auth, single user (or password-gated small team via Streamlit Cloud).
+Stack: Streamlit + Google Gemini 2.5 Flash + Pydantic + instaloader (best-effort crawler) + dual-mode storage (JSON files locally / Supabase in cloud). Single user, or password-gated small team via Streamlit Cloud.
 
 LLM call shape:
 - Brand registration: 1 LLM call (analyze posts → tone profile JSON).
@@ -51,6 +51,7 @@ These commands don't work yet — they're the contract the implementation should
 ## Implementation notes
 
 - Module boundaries are load-bearing: `core/ingest`, `core/analyze`, `core/generate` must not import each other. UI imports only `core/*`, never the other way around.
+- Storage is dual-mode: `storage/repo.py` (JSON files, default) and `storage/supabase_repo.py` (Supabase, when `SUPABASE_URL` + `SUPABASE_KEY` both set). The factory lives in `app.py:_make_repo()`. Both classes expose the same method names so callers don't need to branch.
 - Brand profile JSON schema is defined in spec §2 — implement it as Pydantic models in `storage/repo.py` and validate on every load. A schema-violating file should surface as a warning in the sidebar, not a crash.
 - `brand_rules` (forbidden phrases, must-use names, tone guardrails) is marketer-input, not LLM-extracted. It is supplied to the analyze prompt (to filter `example_posts`) AND to the generate prompt (as hard constraints) AND to the proofread prompt (as final guard).
 - Korean spellcheck is a separate LLM call by design — keep it that way. Single-pass generation has been ruled out.

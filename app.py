@@ -24,7 +24,14 @@ load_dotenv()
 
 # Streamlit Cloud 의 secrets 를 환경변수로 미러링해서 core/llm_client 가 변경 없이 동작하도록.
 try:
-    for key in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_MODEL", "APP_PASSWORD"):
+    for key in (
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_MODEL",
+        "APP_PASSWORD",
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+    ):
         if key in st.secrets and not os.environ.get(key):
             os.environ[key] = st.secrets[key]
 except Exception:
@@ -34,6 +41,20 @@ except Exception:
 st.set_page_config(page_title="SNS Mention", page_icon="📝", layout="wide")
 
 DATA_DIR = Path(__file__).parent / "storage" / "data" / "brands"
+
+
+def _make_repo():
+    """SUPABASE_URL/KEY 가 둘 다 있으면 Supabase, 아니면 로컬 JSON 파일.
+
+    파일 저장소는 Streamlit Cloud 에서 휘발성이라 reboot/재배포 시 데이터가 사라진다.
+    영구 보관이 필요한 운영 환경에서는 Supabase 환경변수를 설정한다.
+    """
+    url = (os.environ.get("SUPABASE_URL") or "").strip()
+    key = (os.environ.get("SUPABASE_KEY") or "").strip()
+    if url and key:
+        from storage.supabase_repo import SupabaseBrandRepo
+        return SupabaseBrandRepo(url=url, key=key)
+    return BrandRepo(DATA_DIR)
 
 
 def _init_state() -> None:
@@ -73,7 +94,7 @@ def main() -> None:
     if not _check_password():
         return
 
-    repo = BrandRepo(DATA_DIR)
+    repo = _make_repo()
     render_sidebar(repo)
 
     mode = st.session_state.mode
