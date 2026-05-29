@@ -253,13 +253,45 @@ def test_call_tool_all_models_exhausted_raises():
     import os as _os
     _os.environ.pop("GEMINI_MODEL", None)
     client = LLMClient(sdk=sdk, max_retries=1)
-    with pytest.raises(LLMError, match="All models"):
+    with pytest.raises(LLMError, match="체인의 모든 모델"):
         client.call_tool(
             system="s", user="u", tool_name="t",
             tool_schema={"type": "object"},
         )
     # 체인 길이만큼 호출됐어야 함
     assert sdk.models.generate_content.call_count == len(client.model_chain)
+
+
+def test_call_tool_falls_back_on_404_not_found():
+    """모델이 본 계정에서 404 (NOT_FOUND) 면 quota 와 똑같이 다음 모델로 폴백."""
+    from google.genai import errors as genai_errors
+
+    sdk = MagicMock()
+    not_found = genai_errors.ClientError(
+        code=404,
+        response_json={
+            "error": {
+                "code": 404,
+                "message": "models/gemini-1.5-flash-8b is not found for API version v1beta",
+                "status": "NOT_FOUND",
+            }
+        },
+    )
+    sdk.models.generate_content.side_effect = [
+        not_found,
+        _success_function_call_response({"ok": True}),
+    ]
+    import os as _os
+    _os.environ.pop("GEMINI_MODEL", None)
+    client = LLMClient(sdk=sdk, max_retries=1)
+    assert len(client.model_chain) >= 2
+
+    result = client.call_tool(
+        system="s", user="u", tool_name="t",
+        tool_schema={"type": "object"},
+    )
+    assert result == {"ok": True}
+    assert sdk.models.generate_content.call_count == 2
 
 
 def test_call_tool_explicit_model_skips_fallback_chain():
