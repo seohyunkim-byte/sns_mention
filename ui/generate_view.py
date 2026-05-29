@@ -127,12 +127,16 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
         placeholder="6/5~6/15 사전 구매 시 도시락 가방+물병 증정. 한정 수량 200세트.",
     )
 
-    col1, col2, col3 = st.columns(3)
+    col0, col1, col2, col3 = st.columns(4)
+    use_comprehensive = col0.checkbox("⭐ 종합 (A안)", value=True)
     use_emotional = col1.checkbox("감성", value=True)
     use_factual = col2.checkbox("정보", value=True)
     use_event = col3.checkbox("이벤트 강조", value=True)
 
+    # 순서가 곧 결과 표시 순서. 종합 안을 항상 맨 위에 두기 위해 먼저 append.
     selected: list[str] = []
+    if use_comprehensive:
+        selected.append("종합")
     if use_emotional:
         selected.append("감성")
     if use_factual:
@@ -170,7 +174,11 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
             # 생성되어 streamlit text_area 의 session_state 캐시가 stale 값을 보여주는
             # 문제를 완전히 차단한다. gen_id 와 함께 belt-and-suspenders.
             caption_key = f"caption-{gen_id}-{i}-{abs(hash(caption_text)) & 0xFFFFFFFF:08x}"
-            st.markdown(f"**변종 {i + 1} [{label}]**")
+            if label == "종합":
+                st.markdown("### ⭐ A안 — 종합 추천")
+                st.caption("감성 후킹 + 핵심 정보 + 이벤트 강조를 한 캡션에 모두 녹인 추천안")
+            else:
+                st.markdown(f"**대안 [{label}]**")
             st.text_area(
                 "caption",
                 value=caption_text,

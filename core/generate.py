@@ -11,6 +11,11 @@ from storage.models import BrandProfile, BrandRules
 
 
 _VARIANT_DESCRIPTIONS = {
+    "종합": (
+        "감정 후킹·핵심 혜택·기한/CTA 를 모두 자연스럽게 한 캡션에 녹인 추천 A 안. "
+        "이걸 그대로 발행해도 손색 없도록 가장 신중하게 작성. "
+        "도입부에 감정 후킹 → 중간에 혜택과 정보 → 마지막에 명확한 CTA·기한 강조 구성을 권장."
+    ),
     "감성": "감정·스토리·공감 중심",
     "정보": "혜택·스펙·이유 중심",
     "이벤트 강조": "한정성·CTA·기간 강조",
@@ -132,7 +137,7 @@ def write_captions(
     extra_instruction: str = "",
 ) -> list[dict[str, Any]]:
     """3개 변종(또는 지정된 변종) 카피를 작성해 리스트 반환."""
-    variants = variants or ["감성", "정보", "이벤트 강조"]
+    variants = variants or ["종합", "감성", "정보", "이벤트 강조"]
     system, user = build_generate_prompt(
         profile=profile, brief=brief, variants=variants, extra_instruction=extra_instruction,
     )
