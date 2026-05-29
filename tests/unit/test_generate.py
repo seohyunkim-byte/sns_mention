@@ -6,7 +6,9 @@ from unittest.mock import MagicMock
 
 from core.generate import (
     GENERATE_SCHEMA,
+    MIN_HASHTAGS,
     PROOFREAD_SCHEMA,
+    _ensure_min_hashtags,
     build_generate_prompt,
     proofread,
     write_captions,
@@ -131,6 +133,96 @@ def test_write_captions_passes_extra_instruction():
         extra_instruction="더 부드럽게",
     )
     assert "더 부드럽게" in client.call_tool.call_args.kwargs["user"]
+
+
+def test_ensure_min_hashtags_backfills_from_signature_and_common():
+    profile = BrandProfile(
+        meta=Meta(brand_name="Brand", slug="brand", analyzed_at=datetime(2026, 5, 26)),
+        voice=Voice(),
+        emoji=Emoji(),
+        hashtag=Hashtag(
+            signature=["#sig1", "#sig2", "#sig3"],
+            common=["#com1", "#com2", "#com3", "#com4", "#com5", "#com6", "#com7"],
+        ),
+        formatting=Formatting(),
+    )
+    variant = {"label": "감성", "caption": "x", "hashtags": ["#existing1", "#existing2"]}
+    result = _ensure_min_hashtags(variant, profile)
+    assert len(result["hashtags"]) >= MIN_HASHTAGS
+    # 기존 태그는 우선 보존되고, signature → common 순서로 보충
+    assert result["hashtags"][0] == "#existing1"
+    assert result["hashtags"][1] == "#existing2"
+    assert "#sig1" in result["hashtags"]
+    assert "#com1" in result["hashtags"]
+
+
+def test_ensure_min_hashtags_no_change_when_already_enough():
+    profile = BrandProfile(
+        meta=Meta(brand_name="Brand", slug="brand", analyzed_at=datetime(2026, 5, 26)),
+        voice=Voice(), emoji=Emoji(),
+        hashtag=Hashtag(signature=["#sig"], common=["#com"]),
+        formatting=Formatting(),
+    )
+    tags = [f"#tag{i}" for i in range(12)]
+    variant = {"label": "감성", "caption": "x", "hashtags": list(tags)}
+    result = _ensure_min_hashtags(variant, profile)
+    assert result["hashtags"] == tags  # 변경 없음
+    assert "#sig" not in result["hashtags"]  # 이미 충분하므로 시그니처 안 추가
+
+
+def test_ensure_min_hashtags_falls_back_to_brand_name_pool_when_profile_thin():
+    """프로필 해시태그가 적어도 최소 갯수는 채워야 한다."""
+    profile = BrandProfile(
+        meta=Meta(brand_name="MyBrand", slug="mb", analyzed_at=datetime(2026, 5, 26)),
+        voice=Voice(), emoji=Emoji(),
+        hashtag=Hashtag(signature=[], common=[]),
+        formatting=Formatting(),
+    )
+    variant = {"label": "감성", "caption": "x", "hashtags": []}
+    result = _ensure_min_hashtags(variant, profile)
+    assert len(result["hashtags"]) >= MIN_HASHTAGS
+
+
+def test_ensure_min_hashtags_skips_duplicates_case_insensitive():
+    profile = BrandProfile(
+        meta=Meta(brand_name="Brand", slug="brand", analyzed_at=datetime(2026, 5, 26)),
+        voice=Voice(), emoji=Emoji(),
+        hashtag=Hashtag(signature=["#Nike"], common=["#nike"]),  # 대소문자만 다른 중복
+        formatting=Formatting(),
+    )
+    variant = {"label": "감성", "caption": "x", "hashtags": ["#nike"]}
+    result = _ensure_min_hashtags(variant, profile)
+    # 같은 태그 (대소문자만 다름) 가 두 번 들어가지 않아야 함
+    lowered = [h.lower() for h in result["hashtags"]]
+    assert len(lowered) == len(set(lowered))
+
+
+def test_write_captions_backfills_hashtags_on_thin_model_output():
+    """모델이 해시태그를 적게 줘도 write_captions 가 자동 보충."""
+    client = MagicMock()
+    client.call_tool.return_value = {
+        "variants": [
+            {"label": "종합", "caption": "x", "hashtags": ["#a", "#b"]},  # 2개만
+        ]
+    }
+    profile = _make_profile()  # signature=["#나이키"], common=["#운동"]
+    result = write_captions(client=client, profile=profile, brief="x")
+    assert len(result[0]["hashtags"]) >= MIN_HASHTAGS
+    assert "#a" in result[0]["hashtags"]
+    assert "#b" in result[0]["hashtags"]
+
+
+def test_generate_schema_hashtags_has_min_items_10():
+    """LLM 측에서도 minItems=10 으로 강제하는지 스키마 점검."""
+    hashtag_schema = GENERATE_SCHEMA["properties"]["variants"]["items"]["properties"]["hashtags"]
+    assert hashtag_schema.get("minItems") == 10
+
+
+def test_build_generate_prompt_requires_10_hashtags_and_length_guidance():
+    profile = _make_profile()
+    system, _ = build_generate_prompt(profile=profile, brief="x", variants=["감성"])
+    assert "10개 이상" in system
+    assert "250~450자" in system or "250-450자" in system
 
 
 def test_proofread_returns_corrected_variants():

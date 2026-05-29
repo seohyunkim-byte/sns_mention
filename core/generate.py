@@ -34,7 +34,11 @@ GENERATE_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "label": {"type": "string"},
                     "caption": {"type": "string"},
-                    "hashtags": {"type": "array", "items": {"type": "string"}},
+                    "hashtags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 10,
+                    },
                 },
             },
         }
@@ -97,10 +101,17 @@ def build_generate_prompt(
 1. 첫 문장은 스크롤을 멈추게 하는 후킹. 평범한 정보 나열·인사말로 시작 X.
    예시 좋은 후킹: 의외의 질문 / 강한 감각적 표현 / 작은 일상 장면 한 컷.
 2. Brief 의 핵심 요소(혜택·기간·수량·조건)는 100% 정확히 옮긴다. 누락도 첨가도 X.
-3. 한 문장은 18~30자 권장. 짧고 리드미컬하게. 인스타에서 빨리 읽히게.
+3. 한 문장은 18~30자, **전체 캡션은 250~450자**가 기본. 인스타 '더 보기'를 펼치게
+   만들 만큼 충실하게 작성. 너무 짧으면 정보가 빈약하고, 너무 길면 가독성이 떨어진다.
+   ("더 짧게/더 길게" 같은 추가 지시가 있을 때만 이 범위를 벗어나도 된다.)
 4. 줄바꿈은 브랜드 프로필의 line_breaks 설정을 따른다.
 5. 이모지는 emoji.avg_per_post 수치에 맞춰 자연스럽게. 강제 X.
 6. 브랜드 시그니처 표현이 있으면 1~2회 자연스럽게 녹인다. 억지 삽입 X.
+7. **해시태그는 변종마다 반드시 10개 이상**. 우선순위:
+   (1) 브랜드 시그니처 해시태그 — 무조건 포함
+   (2) 브랜드 자주 쓰는(common) 해시태그에서 Brief 와 관련된 것
+   (3) Brief 의 핵심 키워드(제품·이벤트·기간)에서 도출한 신규 해시태그
+   중복·동어반복 금지. 너무 길거나 어색한 한국어 조합 금지.
 
 [절대 금지 — 위반 시 실격]
 1. 광고법 위반 단정 표현: '최고', '최고의', '유일한', '1등', '단언컨대', '확실히 ~', '반드시 ~',
@@ -170,6 +181,57 @@ emit_variants 도구로 JSON 반환. caption 은 줄바꿈·이모지를 포함�
     return system, "\n".join(user_parts)
 
 
+MIN_HASHTAGS = 10
+
+
+def _ensure_min_hashtags(
+    variant: dict[str, Any],
+    profile: BrandProfile,
+    minimum: int = MIN_HASHTAGS,
+) -> dict[str, Any]:
+    """변종의 해시태그가 `minimum` 미만이면 브랜드 프로필의 signature/common 에서 보충.
+
+    LLM 이 minItems=10 스키마를 항상 지키지는 못하기 때문에 코드 레벨에서 강제한다.
+    중복은 케이스-인센서티브로 제거하고, 시그니처가 우선.
+    """
+    existing = [h for h in (variant.get("hashtags") or []) if isinstance(h, str) and h.strip()]
+    seen = {h.lower() for h in existing}
+
+    if len(existing) >= minimum:
+        return variant
+
+    pool: list[str] = list(profile.hashtag.signature) + list(profile.hashtag.common)
+    for tag in pool:
+        if len(existing) >= minimum:
+            break
+        if not tag or not isinstance(tag, str):
+            continue
+        normalized = tag.strip()
+        if not normalized:
+            continue
+        if normalized.lower() in seen:
+            continue
+        existing.append(normalized)
+        seen.add(normalized.lower())
+
+    # 그래도 부족하면 브랜드명 기반 일반 해시태그로 채워서 최소 갯수 보장.
+    fallback_pool = [
+        f"#{profile.meta.brand_name}",
+        "#일상", "#추천", "#이벤트", "#소식", "#신상",
+        "#데일리", "#좋아요", "#팔로우", "#인스타그램", "#감성", "#라이프",
+    ]
+    for tag in fallback_pool:
+        if len(existing) >= minimum:
+            break
+        if tag.lower() not in seen:
+            existing.append(tag)
+            seen.add(tag.lower())
+
+    variant = dict(variant)  # 입력 사본 보호
+    variant["hashtags"] = existing
+    return variant
+
+
 def write_captions(
     *,
     client: LLMClient,
@@ -178,7 +240,11 @@ def write_captions(
     variants: list[str] | None = None,
     extra_instruction: str = "",
 ) -> list[dict[str, Any]]:
-    """3개 변종(또는 지정된 변종) 카피를 작성해 리스트 반환."""
+    """3개 변종(또는 지정된 변종) 카피를 작성해 리스트 반환.
+
+    LLM 이 hashtag minItems 를 위반해도 _ensure_min_hashtags 가 브랜드 프로필에서
+    보충해 항상 10개 이상이 보장된다.
+    """
     variants = variants or ["종합", "감성", "정보", "이벤트 강조"]
     system, user = build_generate_prompt(
         profile=profile, brief=brief, variants=variants, extra_instruction=extra_instruction,
@@ -189,7 +255,8 @@ def write_captions(
         tool_name="emit_variants",
         tool_schema=GENERATE_SCHEMA,
     )
-    return list(result.get("variants", []))
+    raw_variants = list(result.get("variants", []))
+    return [_ensure_min_hashtags(v, profile) for v in raw_variants]
 
 
 PROOFREAD_SCHEMA: dict[str, Any] = GENERATE_SCHEMA  # 동일 구조
