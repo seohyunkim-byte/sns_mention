@@ -130,12 +130,17 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
     for i, variant in enumerate(results):
         with st.container(border=True):
             label = variant.get("label", "")
+            caption_text = variant.get("caption", "")
+            # 위젯 key 에 caption 텍스트 해시를 포함 — 카피가 바뀌면 자동으로 다른 위젯이
+            # 생성되어 streamlit text_area 의 session_state 캐시가 stale 값을 보여주는
+            # 문제를 완전히 차단한다. gen_id 와 함께 belt-and-suspenders.
+            caption_key = f"caption-{gen_id}-{i}-{abs(hash(caption_text)) & 0xFFFFFFFF:08x}"
             st.markdown(f"**변종 {i + 1} [{label}]**")
             st.text_area(
                 "caption",
-                value=variant.get("caption", ""),
+                value=caption_text,
                 height=120,
-                key=f"caption-{gen_id}-{i}",
+                key=caption_key,
                 label_visibility="collapsed",
             )
             tags = " ".join(variant.get("hashtags", []))
