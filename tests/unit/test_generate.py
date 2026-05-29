@@ -93,6 +93,22 @@ def test_write_captions_returns_variants_list():
     assert kwargs["tool_schema"] == GENERATE_SCHEMA
 
 
+def test_write_captions_default_variants_include_comprehensive_first():
+    """기본 변종 리스트가 ['종합', '감성', '정보', '이벤트 강조'] 4개이고 '종합'이 맨 앞이어야 한다."""
+    client = MagicMock()
+    client.call_tool.return_value = {"variants": []}
+    profile = _make_profile()
+    write_captions(client=client, profile=profile, brief="x")  # variants 미지정 → 기본 사용
+    system = client.call_tool.call_args.kwargs["system"]
+    # system 프롬프트의 변종 블록에 모든 4개가 포함되고 종합이 변종 1번이어야 함.
+    assert "변종 1 (종합)" in system
+    assert "감성" in system
+    assert "정보" in system
+    assert "이벤트 강조" in system
+    # 종합의 설명 키워드가 prompt 에 들어가야 함.
+    assert "감정 후킹" in system or "한 캡션에 모두 녹인" in system
+
+
 def test_write_captions_passes_extra_instruction():
     client = MagicMock()
     client.call_tool.return_value = {"variants": []}
