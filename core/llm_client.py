@@ -40,9 +40,11 @@ class LLMClient:
     그 도구 호출을 강제한다 — Claude 의 `tool_choice={"type": "tool", "name": ...}` 와 동일 의도.
     """
 
-    # 기본 모델은 'gemini-2.5-flash-lite' — 같은 2.5 계열 중 무료 등급 호출 한도가 가장 큼.
-    # 'gemini-2.5-flash' 는 일 20회 제한이라 팀 사용에 부적합. 환경변수 GEMINI_MODEL 로 덮어쓸 수 있다.
-    DEFAULT_MODEL = "gemini-2.5-flash-lite"
+    # 기본 모델은 'gemini-2.0-flash' — 무료 등급 한도가 넓으면서(보통 일 200~1500회) lite 보다
+    # 한국어 카피 품질이 한 단계 위. 'gemini-2.5-flash' 는 일 20회 제한이라 팀 사용에 부적합.
+    # 환경변수 GEMINI_MODEL 로 덮어쓸 수 있다 — 예: 'gemini-2.5-flash-lite' (가장 넓은 무료 한도),
+    # 'gemini-2.5-flash' (최상 품질, 일 20회).
+    DEFAULT_MODEL = "gemini-2.0-flash"
 
     def __init__(
         self,
