@@ -3,7 +3,7 @@
 10년 차 마케터의 워크플로우에 맞춘 1인용 Streamlit 도구.
 브랜드 IG 톤을 한 번 학습해두면, Brief 만 넣어 3개 변종(감성·정보·이벤트 강조) 카피를 즉시 생성.
 
-**LLM**: Google Gemini 2.0 Flash (무료 등급에서 한국어 품질·호출 한도 균형이 가장 좋음). 분석·생성·맞춤법 교정 모두 동일 모델. 환경변수 `GEMINI_MODEL` 로 다른 모델 지정 가능 (예: `gemini-2.5-flash-lite` — 가장 관대한 무료 한도; `gemini-2.5-flash` — 최상 품질·일 20회).
+**LLM**: Google Gemini 2.5 Flash Lite (현재 무료 등급에서 안정적으로 호출 가능한 유일한 옵션). 분석·생성·맞춤법 교정 모두 동일 모델. 환경변수 `GEMINI_MODEL` 로 다른 모델 지정 가능하지만 대부분 무료 한도가 0/매우 낮음. 더 좋은 품질이 필요하면 Google AI Studio 결제(매우 저렴) 후 `gemini-2.5-flash` 사용 권장.
 
 ## 빠른 시작
 
@@ -59,8 +59,8 @@ mypy core storage ui app.py  # 타입 체크
 ### 사전 준비
 - GitHub 계정 + 이 저장소(public OK)
 - Google AI Studio 에서 발급한 `GEMINI_API_KEY` — https://aistudio.google.com → "Get API key"
-  - 무료 등급은 **모델별로** 다르며, 자주 변경됩니다. 본 앱 기본 모델 `gemini-2.0-flash` 기준 분당·일별 호출 제한 존재 (정확한 한도는 https://ai.google.dev/gemini-api/docs/rate-limits 에서 확인)
-  - `gemini-2.5-flash` 는 일 20회 만 무료라 팀 사용에 부적합. 본 앱은 의도적으로 flash 시리즈를 기본값으로 사용
+  - 무료 등급은 **모델별로** 다르며, 자주 변경됩니다. 본 앱 기본 모델 `gemini-2.5-flash-lite` 기준 일 1,000회 수준 (정확한 한도는 https://ai.google.dev/gemini-api/docs/rate-limits 에서 확인)
+  - `gemini-2.0-flash` 와 `gemini-2.5-flash` 는 현재 free tier 한도가 0 또는 매우 낮음. 본 앱은 lite 를 기본값으로 사용
 - 팀원들과 공유할 임의의 비밀번호 1개
 
 ### 배포 절차
@@ -71,7 +71,7 @@ mypy core storage ui app.py  # 타입 체크
    ```toml
    GEMINI_API_KEY = "your-google-ai-studio-key"
    APP_PASSWORD = "팀원들과 공유할 비밀번호"
-   # GEMINI_MODEL = "gemini-2.0-flash"   # 기본값. 다른 모델 쓰려면 주석 해제 + 값 변경
+   # GEMINI_MODEL = "gemini-2.5-flash-lite"   # 기본값. 다른 모델 쓰려면 주석 해제 + 값 변경
    ```
    (이 값들은 `.streamlit/secrets.toml.example` 형식 그대로입니다.)
 4. 앱이 자동으로 재시작되면 비밀번호 화면이 뜹니다. 팀에 URL + 비밀번호를 공유하면 끝.
@@ -80,7 +80,7 @@ mypy core storage ui app.py  # 타입 체크
 
 - **브랜드 프로필 저장은 휘발성입니다.** Streamlit Cloud 무료 티어는 컨테이너가 재시작되면 `storage/data/brands/` 파일이 사라집니다. 즉, 앱 재배포·휴면 후 깨어날 때 등록된 브랜드를 다시 등록해야 합니다.
 - **단일 비밀번호 + 공유 라이브러리 모델입니다.** 팀원별 데이터 분리, 사용량 미터링은 v2 작업으로 별도 진행해야 합니다.
-- **Gemini 무료 등급 한도는 모델·시점에 따라 변동**. 현재 기본 `gemini-2.0-flash` 기준 분당·일별 호출 제한 존재. 한 번의 카피 생성 = 분석 1회 (등록 시 1번) + 생성 2회 = 합 3회. 한도 초과 시 429 에러가 뜨고 일정 시간 후 자동 복구 (요금 청구 X, 카드 등록 안 했다면).
+- **Gemini 무료 등급 한도는 모델·시점에 따라 변동**. 현재 기본 `gemini-2.5-flash-lite` 기준 분당·일별 호출 제한 존재. 한 번의 카피 생성 = 분석 1회 (등록 시 1번) + 생성 2회 = 합 3회. 한도 초과 시 429 에러가 뜨고 일정 시간 후 자동 복구 (요금 청구 X, 카드 등록 안 했다면).
 
 ---
 
