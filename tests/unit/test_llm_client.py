@@ -32,6 +32,24 @@ def _stub_sdk_without_function_call() -> MagicMock:
     response = MagicMock()
     part = MagicMock()
     part.function_call = None
+    # text 도 명시적으로 None 으로 둬서 fallback JSON 추출 시도가 실패하도록.
+    part.text = None
+    content = MagicMock()
+    content.parts = [part]
+    candidate = MagicMock()
+    candidate.content = content
+    response.candidates = [candidate]
+    sdk.models.generate_content.return_value = response
+    return sdk
+
+
+def _stub_sdk_with_text_json(text_payload: str) -> MagicMock:
+    """function_call 없이 텍스트로 JSON 을 반환한 응답 (Gemini 가 mode=ANY 무시한 경우)."""
+    sdk = MagicMock()
+    response = MagicMock()
+    part = MagicMock()
+    part.function_call = None
+    part.text = text_payload
     content = MagicMock()
     content.parts = [part]
     candidate = MagicMock()
@@ -114,3 +132,53 @@ def test_init_raises_when_api_key_missing(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     with pytest.raises(LLMError, match="missing"):
         LLMClient()
+
+
+# --- function_call fallback: 텍스트로 JSON 만 돌려주는 모델 응답 처리 ----------------
+
+def test_call_tool_fallback_parses_json_from_markdown_fence():
+    """Gemini가 mode=ANY 를 무시하고 ```json ... ``` 텍스트로 응답해도 동작해야 한다."""
+    text = '```json\n{"variants": [{"label": "감성", "caption": "hi", "hashtags": []}]}\n```'
+    sdk = _stub_sdk_with_text_json(text)
+    client = LLMClient(sdk=sdk, model="gemini-2.5-flash-lite")
+    result = client.call_tool(
+        system="s", user="u", tool_name="emit_variants",
+        tool_schema={"type": "object"},
+    )
+    assert "variants" in result
+    assert result["variants"][0]["caption"] == "hi"
+
+
+def test_call_tool_fallback_parses_bare_json():
+    """펜스 없이 그냥 JSON 만 텍스트로 줘도 추출."""
+    text = 'Sure, here it is:\n{"key": "value", "n": 42}\nDone.'
+    sdk = _stub_sdk_with_text_json(text)
+    client = LLMClient(sdk=sdk)
+    result = client.call_tool(
+        system="s", user="u", tool_name="t",
+        tool_schema={"type": "object"},
+    )
+    assert result == {"key": "value", "n": 42}
+
+
+def test_call_tool_fallback_handles_json_lang_tag():
+    """```json (소문자 lang tag) 도 인식."""
+    text = "결과:\n```json\n{\"foo\": \"bar\"}\n```"
+    sdk = _stub_sdk_with_text_json(text)
+    client = LLMClient(sdk=sdk)
+    result = client.call_tool(
+        system="s", user="u", tool_name="t",
+        tool_schema={"type": "object"},
+    )
+    assert result == {"foo": "bar"}
+
+
+def test_call_tool_fallback_returns_error_when_text_has_no_json():
+    """텍스트만 있고 JSON 이 없으면 기존 에러 그대로 raise."""
+    sdk = _stub_sdk_with_text_json("죄송합니다, 응답할 수 없습니다.")
+    client = LLMClient(sdk=sdk)
+    with pytest.raises(LLMError, match="no function_call"):
+        client.call_tool(
+            system="s", user="u", tool_name="t",
+            tool_schema={"type": "object"},
+        )

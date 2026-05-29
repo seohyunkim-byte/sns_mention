@@ -142,11 +142,67 @@ class LLMClient:
                 if fc and fc.name == tool_name:
                     return dict(fc.args or {})
 
+        # Fallback — Gemini lite/flash 가 가끔 mode=ANY 를 무시하고 ```json ... ``` 텍스트로 응답.
+        # 카피 자체는 정상이므로 텍스트에서 JSON 만 추출해 같은 결과로 반환.
+        extracted = _extract_json_from_text(response)
+        if extracted is not None:
+            logger.warning(
+                "llm.call_tool fallback: parsed JSON from text response model=%s tool=%s",
+                self.model, tool_name,
+            )
+            return extracted
+
         # 진단 정보 — finish_reason 과 텍스트 내용을 에러 메시지에 포함시켜 어떤 상황인지 파악 가능하게.
         diag = _diagnose_no_function_call(response)
         logger.error("llm.call_tool no function_call model=%s tool=%s diag=%s",
                      self.model, tool_name, diag)
         raise LLMError(f"no function_call block in response ({diag})")
+
+
+def _extract_json_from_text(response: Any) -> dict[str, Any] | None:
+    """response 의 텍스트 파트에서 JSON 객체를 추출한다. 실패 시 None.
+
+    ```json ... ``` 코드 펜스, 또는 펜스 없이 그냥 JSON 본문 두 경우 모두 시도.
+    """
+    import json as _json
+    import re as _re
+
+    text_chunks: list[str] = []
+    for candidate in getattr(response, "candidates", None) or []:
+        content = getattr(candidate, "content", None)
+        if not content:
+            continue
+        for part in getattr(content, "parts", None) or []:
+            text = getattr(part, "text", None)
+            if isinstance(text, str) and text:
+                text_chunks.append(text)
+    if not text_chunks:
+        return None
+    full_text = "".join(text_chunks)
+
+    # 1) ```json ... ``` 또는 ``` ... ``` 펜스 내부 우선 시도
+    fence_match = _re.search(r"```(?:json)?\s*\n?(.*?)```", full_text, _re.DOTALL)
+    if fence_match:
+        candidate_text = fence_match.group(1).strip()
+        try:
+            parsed = _json.loads(candidate_text)
+            if isinstance(parsed, dict):
+                return parsed
+        except _json.JSONDecodeError:
+            pass
+
+    # 2) 펜스 없으면 첫 { 부터 마지막 } 까지 시도
+    first = full_text.find("{")
+    last = full_text.rfind("}")
+    if first != -1 and last > first:
+        candidate_text = full_text[first : last + 1]
+        try:
+            parsed = _json.loads(candidate_text)
+            if isinstance(parsed, dict):
+                return parsed
+        except _json.JSONDecodeError:
+            return None
+    return None
 
 
 def _diagnose_no_function_call(response: Any) -> str:
