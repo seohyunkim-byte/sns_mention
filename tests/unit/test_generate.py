@@ -57,11 +57,21 @@ def test_build_generate_prompt_contains_all_sections():
 
 
 def test_build_generate_prompt_filters_variants():
+    """선택되지 않은 변종 라벨이 variant_block 이나 structure_hints 에 새지 않아야 한다.
+
+    참고: '정보' 같은 단어는 일반 한국어 어휘로도 등장하므로(예: '핵심 요소'),
+    변종 누출 검증은 변종 라벨 패턴('(정보)', '(이벤트 강조):') 으로 정확하게 확인한다.
+    """
     profile = _make_profile()
     system, _ = build_generate_prompt(profile=profile, brief="x", variants=["감성"])
-    assert "감성" in system
-    assert "정보" not in system
-    assert "이벤트 강조" not in system
+    # 선택된 변종은 변종 블록·권장 구조 양쪽 모두에 포함되어야 함.
+    assert "(감성)" in system
+    assert "감성: 일상 장면" in system
+    # 선택되지 않은 변종 라벨은 어디에도 없어야 함.
+    assert "(정보)" not in system
+    assert "(이벤트 강조)" not in system
+    assert "정보:" not in system
+    assert "이벤트 강조:" not in system
 
 
 def test_build_generate_prompt_includes_extra_instruction():
