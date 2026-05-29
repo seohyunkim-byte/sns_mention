@@ -40,11 +40,11 @@ class LLMClient:
     그 도구 호출을 강제한다 — Claude 의 `tool_choice={"type": "tool", "name": ...}` 와 동일 의도.
     """
 
-    # 기본 모델은 'gemini-2.0-flash' — 무료 등급 한도가 넓으면서(보통 일 200~1500회) lite 보다
-    # 한국어 카피 품질이 한 단계 위. 'gemini-2.5-flash' 는 일 20회 제한이라 팀 사용에 부적합.
-    # 환경변수 GEMINI_MODEL 로 덮어쓸 수 있다 — 예: 'gemini-2.5-flash-lite' (가장 넓은 무료 한도),
-    # 'gemini-2.5-flash' (최상 품질, 일 20회).
-    DEFAULT_MODEL = "gemini-2.0-flash"
+    # 기본 모델은 'gemini-2.5-flash-lite' — 현재 무료 등급에서 안정적으로 호출 가능한 유일한
+    # 옵션. 'gemini-2.0-flash' 와 'gemini-2.5-flash' 는 free tier 한도가 0 또는 매우 낮아 팀 사용
+    # 불가. 더 좋은 품질이 필요하면 환경변수 GEMINI_MODEL='gemini-2.5-flash' 로 덮어쓰고
+    # Google AI Studio 결제(매우 저렴)를 활성화해야 한다.
+    DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
     def __init__(
         self,
