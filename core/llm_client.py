@@ -40,11 +40,16 @@ class LLMClient:
     그 도구 호출을 강제한다 — Claude 의 `tool_choice={"type": "tool", "name": ...}` 와 동일 의도.
     """
 
-    # 기본 모델은 'gemini-2.5-flash-lite' — 현재 무료 등급에서 안정적으로 호출 가능한 유일한
-    # 옵션. 'gemini-2.0-flash' 와 'gemini-2.5-flash' 는 free tier 한도가 0 또는 매우 낮아 팀 사용
-    # 불가. 더 좋은 품질이 필요하면 환경변수 GEMINI_MODEL='gemini-2.5-flash' 로 덮어쓰고
-    # Google AI Studio 결제(매우 저렴)를 활성화해야 한다.
-    DEFAULT_MODEL = "gemini-2.5-flash-lite"
+    # Google 무료 등급이 모델별로 자주 변경되므로, 단일 모델 의존 X.
+    # 첫 모델이 quota 초과(429 RESOURCE_EXHAUSTED) 시 다음 모델로 자동 폴백.
+    # 환경변수 GEMINI_MODEL 이 설정되면 그 단일 모델만 사용 (폴백 X — 사용자 명시 선택 존중).
+    DEFAULT_MODEL_CHAIN: tuple[str, ...] = (
+        "gemini-2.0-flash-lite",   # 2.0 lite — 무료 한도 비교적 넓음
+        "gemini-2.5-flash-lite",   # 2.5 lite — 일 20~1000회 (시점에 따라 변동)
+        "gemini-1.5-flash-8b",     # 1.5 8b — 가장 작은 legacy, 무료 한도 보장
+        "gemini-1.5-flash",        # 1.5 flash — 마지막 보루
+    )
+    DEFAULT_MODEL = DEFAULT_MODEL_CHAIN[0]  # 첫 모델 = 기본
 
     def __init__(
         self,
@@ -55,8 +60,15 @@ class LLMClient:
         max_retries: int = 3,
         max_tokens: int = 8192,
     ):
-        if model is None:
-            model = os.environ.get("GEMINI_MODEL", self.DEFAULT_MODEL)
+        # 명시적 모델 지정 시(인자 또는 GEMINI_MODEL 환경변수) 단일 모델로만 시도.
+        # 명시 안 했으면 DEFAULT_MODEL_CHAIN 전부 순차 시도.
+        explicit_model = model or os.environ.get("GEMINI_MODEL")
+        if explicit_model:
+            self.model_chain: tuple[str, ...] = (explicit_model,)
+        else:
+            self.model_chain = self.DEFAULT_MODEL_CHAIN
+        self.model = self.model_chain[0]  # 호환성 — 외부 코드 (예: model_version 메타) 에서 접근
+
         if sdk is None:
             key = (
                 api_key
@@ -67,7 +79,6 @@ class LLMClient:
                 raise LLMError("GEMINI_API_KEY missing")
             sdk = genai.Client(api_key=key)
         self._sdk = sdk
-        self.model = model
         self.max_retries = max_retries
         self.max_tokens = max_tokens
 
@@ -79,10 +90,48 @@ class LLMClient:
         tool_name: str,
         tool_schema: dict[str, Any],
     ) -> dict[str, Any]:
-        """function calling 으로 JSON 출력 강제. 도구 입력 dict 를 반환."""
+        """function calling 으로 JSON 출력 강제. 도구 입력 dict 를 반환.
 
+        model_chain 의 모델을 순서대로 시도. 어떤 모델이 quota 초과(429)면
+        다음 모델로 자동 폴백. 모든 모델이 막혔을 때만 LLMError.
+        """
+        last_quota_error: LLMError | None = None
+        for model in self.model_chain:
+            try:
+                return self._call_one_model(
+                    model=model,
+                    system=system,
+                    user=user,
+                    tool_name=tool_name,
+                    tool_schema=tool_schema,
+                )
+            except LLMError as e:
+                if _is_quota_exhausted(e):
+                    logger.warning(
+                        "llm.call_tool quota exhausted on %s, falling back: %s",
+                        model, e,
+                    )
+                    last_quota_error = e
+                    continue
+                raise
+        # 모든 모델이 quota 초과
+        raise LLMError(
+            f"All models in chain exhausted free-tier quota. "
+            f"Last error: {last_quota_error}. "
+            f"Try again after midnight UTC or override GEMINI_MODEL secret."
+        )
+
+    def _call_one_model(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        tool_name: str,
+        tool_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        """단일 모델로 1회 호출 + 결과 파싱. 폴백 없음."""
         # Gemini SDK 는 dict 를 Schema 로 자동 변환하지만 타입 힌트는 Schema|None 이라 cast 필요.
-        # mode 도 Enum 이 정식이라 문자열 대신 Enum 값 사용.
         tool = genai_types.Tool(
             function_declarations=[
                 genai_types.FunctionDeclaration(
@@ -92,10 +141,6 @@ class LLMClient:
                 )
             ]
         )
-        # Gemini 2.5 Flash 는 기본으로 "thinking" 토큰을 max_output_tokens 에서 소비한다.
-        # 함수 호출 강제 시나리오에서는 reasoning 이 필요 없고, thinking 이 길어지면
-        # function_call 을 발화하기 전에 토큰 한도가 차서 빈 응답이 나올 수 있다.
-        # thinking_budget=0 으로 비활성화해서 출력 토큰 예산을 모두 실제 응답에 사용한다.
         config = genai_types.GenerateContentConfig(
             system_instruction=system,
             tools=[tool],
@@ -118,18 +163,18 @@ class LLMClient:
         )
         def _call() -> Any:
             return self._sdk.models.generate_content(
-                model=self.model,
+                model=model,
                 contents=user,
                 config=config,
             )
 
-        logger.info("llm.call_tool model=%s tool=%s", self.model, tool_name)
+        logger.info("llm.call_tool model=%s tool=%s", model, tool_name)
         try:
             response = _call()
         except (genai_errors.APIError, ConnectionError, TimeoutError) as e:
             logger.error(
                 "llm.call_tool failed model=%s tool=%s err=%s",
-                self.model, tool_name, e,
+                model, tool_name, e,
             )
             raise LLMError(f"LLM call failed: {e}") from e
 
@@ -143,20 +188,29 @@ class LLMClient:
                     return dict(fc.args or {})
 
         # Fallback — Gemini lite/flash 가 가끔 mode=ANY 를 무시하고 ```json ... ``` 텍스트로 응답.
-        # 카피 자체는 정상이므로 텍스트에서 JSON 만 추출해 같은 결과로 반환.
         extracted = _extract_json_from_text(response)
         if extracted is not None:
             logger.warning(
                 "llm.call_tool fallback: parsed JSON from text response model=%s tool=%s",
-                self.model, tool_name,
+                model, tool_name,
             )
             return extracted
 
-        # 진단 정보 — finish_reason 과 텍스트 내용을 에러 메시지에 포함시켜 어떤 상황인지 파악 가능하게.
         diag = _diagnose_no_function_call(response)
         logger.error("llm.call_tool no function_call model=%s tool=%s diag=%s",
-                     self.model, tool_name, diag)
+                     model, tool_name, diag)
         raise LLMError(f"no function_call block in response ({diag})")
+
+
+def _is_quota_exhausted(error: Exception) -> bool:
+    """LLMError 메시지에서 429/RESOURCE_EXHAUSTED 패턴을 감지."""
+    msg = str(error)
+    return (
+        "RESOURCE_EXHAUSTED" in msg
+        or "429" in msg
+        or "exceeded your current quota" in msg.lower()
+        or "free_tier" in msg.lower()
+    )
 
 
 def _extract_json_from_text(response: Any) -> dict[str, Any] | None:
