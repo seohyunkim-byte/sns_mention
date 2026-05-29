@@ -10,6 +10,9 @@ dependencies = [
     "instaloader>=4.13",
     "python-dotenv>=1.0",
     "tenacity>=8.5",
+    # Pin <2.20 — newer versions pull storage3>=2.30 which depends on pyiceberg
+    # (requires C++ build tools on Windows). 2.18 covers all the APIs we use.
+    "supabase>=2.7,<2.20",
 ]
 
 [project.optional-dependencies]
