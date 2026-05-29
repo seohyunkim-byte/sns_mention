@@ -75,15 +75,50 @@ def render_generate_view(repo: BrandRepo, client_factory) -> None:
         st.error(f"브랜드 로드 실패: {e}")
         return
 
-    st.header(profile.meta.brand_name)
+    header_col, edit_col, delete_col = st.columns([6, 1, 1])
+    header_col.header(profile.meta.brand_name)
+    if edit_col.button("✏️ 수정", key="edit_brand_btn", use_container_width=True):
+        st.session_state.mode = "edit"
+        st.rerun()
+    if delete_col.button("🗑 삭제", key="delete_brand_btn", use_container_width=True):
+        st.session_state.confirm_delete_slug = slug
+
     st.caption(
         f"register: {profile.voice.register} · 평균 길이: {profile.voice.avg_length_chars}자 · "
         f"이모지 평균: {profile.emoji.avg_per_post:.1f}/post"
     )
 
-    with st.expander("브랜드 프로필 / 규칙 보기·편집", expanded=False):
+    # 삭제 확인 UI — confirm_delete_slug 가 현재 브랜드와 일치할 때만 표시
+    if st.session_state.get("confirm_delete_slug") == slug:
+        history_count = len(profile.caption_history)
+        st.warning(
+            f"⚠️ **'{profile.meta.brand_name}'** 브랜드와 생성 히스토리 {history_count}개가 "
+            f"영구 삭제됩니다. 이 작업은 되돌릴 수 없습니다."
+        )
+        cancel_col, confirm_col = st.columns(2)
+        if cancel_col.button("취소", key="cancel_delete_btn", use_container_width=True):
+            st.session_state.pop("confirm_delete_slug", None)
+            st.rerun()
+        if confirm_col.button(
+            "정말 삭제", type="primary", key="really_delete_btn", use_container_width=True
+        ):
+            repo.delete(slug)
+            # 잔존 상태 정리
+            for k in (
+                "confirm_delete_slug",
+                "current_slug",
+                "last_results",
+                "last_brief",
+                "brief_input",
+            ):
+                st.session_state.pop(k, None)
+            st.session_state.mode = None
+            st.rerun()
+        return  # 확인 중일 때는 나머지 화면 숨김
+
+    with st.expander("브랜드 프로필 / 규칙 보기", expanded=False):
         st.json(profile.model_dump(), expanded=False)
-        st.caption("MVP: 인라인 편집은 v2 에서 지원. 지금은 JSON 파일 직접 편집 후 새로고침.")
+        st.caption("프로필 항목을 수정하려면 상단의 ✏️ 수정 버튼을 누르세요.")
 
     brief = st.text_area(
         "Brief (이벤트·신상품 등 핵심 정보)",
